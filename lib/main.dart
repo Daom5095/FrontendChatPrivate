@@ -1,3 +1,5 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/auth/login_screen.dart';
@@ -9,15 +11,34 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // Guardaremos la "promesa" (Future) en el estado para que solo se cree una vez.
+  late Future<void> _tryAutoLoginFuture;
+  
+  // El AuthService también se crea aquí para que persista.
+  final AuthService _authService = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    // Llamamos a tryAutoLogin UNA SOLA VEZ cuando el widget se inicializa.
+    _tryAutoLoginFuture = _authService.tryAutoLogin();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (ctx) => AuthService(),
+    // Usamos ChangeNotifierProvider.value para proveer la instancia ya creada.
+    return ChangeNotifierProvider.value(
+      value: _authService,
       child: Consumer<AuthService>(
-        builder: (ctx, authService, _) {
+        builder: (ctx, auth, _) {
           return MaterialApp(
             title: 'Chat Seguro',
             theme: ThemeData(
@@ -25,12 +46,15 @@ class MyApp extends StatelessWidget {
               visualDensity: VisualDensity.adaptivePlatformDensity,
             ),
             home: FutureBuilder(
-              future: authService.tryAutoLogin(),
+              // Usamos la promesa que guardamos en el estado. NO se vuelve a crear.
+              future: _tryAutoLoginFuture,
               builder: (context, snapshot) {
+                // Mientras la promesa inicial se completa, muestra la pantalla de carga.
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SplashScreen();
                 }
-                return authService.isAuthenticated
+                // Una vez completada, decide qué pantalla mostrar basado en el estado.
+                return auth.isAuthenticated
                     ? const HomeScreen()
                     : const LoginScreen();
               },
