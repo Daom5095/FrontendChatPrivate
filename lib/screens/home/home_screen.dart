@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../users/user_list_screen.dart'; // <-- Importa la nueva pantalla
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -23,6 +24,15 @@ class HomeScreen extends StatelessWidget {
       ),
       body: const Center(
         child: Text('¡Bienvenido! Aquí verás tus conversaciones.'),
+      ),
+      // --- AÑADE ESTE BOTÓN ---
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (ctx) => const UserListScreen()),
+          );
+        },
       ),
     );
   }

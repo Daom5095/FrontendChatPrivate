@@ -29,8 +29,8 @@ class AuthService with ChangeNotifier {
       final keys = await _cryptoService.generateRSAKeyPair();
       final publicKey = keys['publicKey']!;
       final privateKey = keys['privateKey']!;
-
-      final response = await _authApi.registerAndUploadKey(
+      
+          final response = await _authApi.register(
           username, email, password, publicKey);
 
       if (response['success']) {

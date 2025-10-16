@@ -15,8 +15,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-
-  Future<void> _submit() async {
+Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -31,15 +30,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (!mounted) return;
 
-    if (!success) {
+
+    if (success) {
+   
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error en el registro. Inténtalo de nuevo.')),
       );
     }
+    // --------------------------------
 
     setState(() { _isLoading = false; });
   }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
