@@ -32,7 +32,9 @@ Future<void> _submit() async {
 
 
     if (success) {
-   
+      // Si el registro es exitoso, cerramos esta pantalla.
+      // El `Consumer` en `main.dart` se encargará de mostrar la `HomeScreen`.
+      Navigator.of(context).pop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error en el registro. Inténtalo de nuevo.')),
