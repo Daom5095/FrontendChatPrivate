@@ -44,12 +44,11 @@ class _UserListScreenState extends State<UserListScreen> {
       if (!mounted) return;
 
       // Navega a la pantalla de chat con la conversación recién creada
-      Navigator.of(context).push(
+    Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (ctx) => ChatScreen(conversation: newConversation),
+          builder: (ctx) => ChatScreen(conversationData: newConversation),
         ),
       );
-
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al crear el chat: $e')),

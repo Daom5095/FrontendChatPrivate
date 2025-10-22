@@ -1,9 +1,10 @@
-
+// lib/services/socket_service.dart
 
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
 import 'dart:convert';
+import '../config/app_constants.dart'; // Asegúrate que la ruta sea correcta
 
 class SocketService {
   late StompClient _stompClient;
@@ -12,43 +13,64 @@ class SocketService {
   void connect(String token, Function(StompFrame) onMessageReceived) {
     _stompClient = StompClient(
       config: StompConfig(
-        // URL de tu WebSocket
-        url: 'ws://localhost:8080/ws',
+        // Asegúrate que la URL base sea correcta
+        url: '${AppConstants.baseUrl.replaceFirst('http', 'ws')}/ws',
         onConnect: (StompFrame frame) {
           isConnected = true;
           print("Conectado al WebSocket");
 
-          // Nos suscribimos a la cola personal de mensajes del usuario
           _stompClient.subscribe(
-            destination: '/user/queue/messages',
+            destination: '/user/queue/messages', // Suscribe a la cola personal
             callback: onMessageReceived,
           );
         },
-        onWebSocketError: (dynamic error) => print(error.toString()),
+        onWebSocketError: (dynamic error) {
+             print("Error de WebSocket: ${error.toString()}");
+             isConnected = false; // Marcar como desconectado en caso de error
+        },
         stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
+        // Añadir reintentos de conexión por si acaso
+        connectionTimeout: const Duration(seconds: 10),
+        heartbeatOutgoing: const Duration(seconds: 20000),
+        heartbeatIncoming: const Duration(seconds: 20000),
       ),
     );
     _stompClient.activate();
   }
 
-  void sendMessage(int conversationId, String messageText) {
-    if (!isConnected) return;
+  // --- MÉTODO MODIFICADO ---
+  // Ahora requiere la lista de IDs de los participantes
+  void sendMessage(int conversationId, String messageText, List<int> participantIds) {
+    if (!isConnected) {
+        print("No conectado al socket, no se puede enviar mensaje.");
+        return;
+    }
 
-    // Por ahora enviamos el texto plano. En el siguiente paso lo cifraremos.
+    // Creamos el mapa `encryptedKeys`. El backend (`MessageService`)
+    // iterará sobre las *claves* de este mapa para saber a quién reenviar el mensaje.
+    // El *valor* asociado a cada clave será importante cuando implementemos
+    // el cifrado (contendrá la clave de sesión cifrada para ese usuario),
+    // pero por ahora, podemos usar un placeholder.
+    final Map<String, String> encryptedKeysMap = {
+      for (var id in participantIds) id.toString(): 'placeholder_key' // El backend usa las claves (IDs)
+    };
+
     _stompClient.send(
-      destination: '/app/chat.send',
+      destination: '/app/chat.send', // Endpoint del backend para recibir mensajes
       body: json.encode({
         'conversationId': conversationId,
-        'ciphertext': messageText,
-        // TODO: En el siguiente paso, añadiremos las claves cifradas
-        'encryptedKeys': {},
+        'ciphertext': messageText, // Por ahora, texto plano
+        'encryptedKeys': encryptedKeysMap, // Mapa con { "userId": "placeholder_key", ... }
       }),
     );
+    print('Mensaje enviado a conv $conversationId para usuarios: $participantIds');
   }
 
   void disconnect() {
-    _stompClient.deactivate();
+    if (_stompClient.connected) { // Solo desactivar si está activo
+        _stompClient.deactivate();
+    }
     isConnected = false;
     print("Desconectado del WebSocket");
   }
