@@ -1,26 +1,16 @@
 // lib/services/crypto_service.dart
 
-import 'package:basic_utils/basic_utils.dart';
-// Importamos la clase específica que necesitamos para la conversión
-import 'package:pointycastle/asymmetric/api.dart';
+import 'package:fast_rsa/fast_rsa.dart';
 
 class CryptoService {
   Future<Map<String, String>> generateRSAKeyPair() async {
-    final keyPair = CryptoUtils.generateRSAKeyPair();
+    // Esta llamada utiliza código nativo optimizado. Es extremadamente rápida.
+    final keyPair = await RSA.generate(2048);
 
-    
-    // Le decimos a Dart que trate estas claves como claves RSA específicas
-    final publicKey = keyPair.publicKey as RSAPublicKey;
-    final privateKey = keyPair.privateKey as RSAPrivateKey;
-    // ------------------------------------
-
- 
-    final publicKeyPem = CryptoUtils.encodeRSAPublicKeyToPem(publicKey);
-    final privateKeyPem = CryptoUtils.encodeRSAPrivateKeyToPem(privateKey);
-
+    // El plugin ya nos devuelve las claves en el formato PEM que necesitamos.
     return {
-      'publicKey': publicKeyPem,
-      'privateKey': privateKeyPem,
+      'publicKey': keyPair.publicKey,
+      'privateKey': keyPair.privateKey,
     };
   }
 }
