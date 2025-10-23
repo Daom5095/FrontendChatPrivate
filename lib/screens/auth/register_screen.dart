@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../home/home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,7 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> _submit() async {
+Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -30,23 +31,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _passwordController.text,
     );
 
-    if (!mounted) return; // Esta línea es CRÍTICA después de un await
+    // IMPORTANTE: Verificar montaje DESPUÉS del await
+    if (!mounted) return;
 
     if (success) {
-      // Si el registro es exitoso, el Consumer en main.dart debería detectar
-      // el cambio en authService.isAuthenticated y navegar automáticamente
-      // a HomeScreen. No necesitamos hacer nada aquí.
-      print("Registro exitoso, estado notificado. La UI se actualizará automáticamente.");
+      print("Registro exitoso en backend. Navegando a HomeScreen...");
+      // Ahora HomeScreen será reconocido
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (ctx) => HomeScreen()), // SIN const
+      );
+      // No necesitamos detener el loading aquí
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error en el registro. Verifica los datos o el usuario/email podría ya existir.')),
       );
-      // Solo detenemos el indicador de carga si el registro falla y la pantalla sigue montada.
-      if (mounted) {
-        setState(() { _isLoading = false; });
-      }
+      // Solo detenemos el indicador de carga si falla
+      // if (mounted) { // No es necesario comprobar mounted de nuevo aquí
+         setState(() { _isLoading = false; });
+      // }
     }
-  
   }
 
   @override

@@ -9,6 +9,8 @@ class SecureStorageService {
   static const _keyUserId = 'userId'; // Esto parece que no se usa, pero es inocuo
   static const _keyPrivateKey = 'privateKey'; // Clave para la clave privada
 
+  
+
   Future<void> saveToken(String token) async {
     await _storage.write(key: _keyToken, value: token);
   }

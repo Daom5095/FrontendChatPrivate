@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
-import '../users/user_list_screen.dart'; // <-- Importa la nueva pantalla
+import '../users/user_list_screen.dart'; 
+import '../home/home_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
