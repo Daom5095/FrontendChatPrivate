@@ -39,7 +39,7 @@ class SocketService {
     _stompClient.activate();
   }
 
-  // --- MÉTODO MODIFICADO ---
+  // --- MÉTODO CORREGIDO ---
   // Ahora requiere la lista de IDs de los participantes
   void sendMessage(int conversationId, String messageText, List<int> participantIds) {
     if (!isConnected) {
@@ -49,9 +49,6 @@ class SocketService {
 
     // Creamos el mapa `encryptedKeys`. El backend (`MessageService`)
     // iterará sobre las *claves* de este mapa para saber a quién reenviar el mensaje.
-    // El *valor* asociado a cada clave será importante cuando implementemos
-    // el cifrado (contendrá la clave de sesión cifrada para ese usuario),
-    // pero por ahora, podemos usar un placeholder.
     final Map<String, String> encryptedKeysMap = {
       for (var id in participantIds) id.toString(): 'placeholder_key' // El backend usa las claves (IDs)
     };
@@ -68,7 +65,8 @@ class SocketService {
   }
 
   void disconnect() {
-    if (_stompClient.connected) { // Solo desactivar si está activo
+    // Verifica si el cliente está activado antes de intentar desactivar
+    if (_stompClient.isActive) {
         _stompClient.deactivate();
     }
     isConnected = false;

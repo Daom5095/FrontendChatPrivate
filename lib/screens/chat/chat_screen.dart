@@ -16,7 +16,7 @@ class ChatMessage {
 }
 
 class ChatScreen extends StatefulWidget {
-  // Ahora esperamos un Map<String, dynamic> más completo
+  // Esperamos un Map<String, dynamic>
   final Map<String, dynamic> conversationData;
 
   const ChatScreen({super.key, required this.conversationData});
@@ -50,10 +50,12 @@ class _ChatScreenState extends State<ChatScreen> {
           final decodedBody = json.decode(frame.body!);
 
           // Ignora mensajes que no sean para esta conversación
-          if (decodedBody['conversationId'] != widget.conversationData['id']) return;
+          final conversationId = decodedBody['conversationId'];
+          if (conversationId == null || conversationId != widget.conversationData['id']) return;
 
+          final senderId = decodedBody['senderId'];
           // ¡IMPORTANTE! Evita mostrar el "eco" de tu propio mensaje
-          if (decodedBody['senderId'] == currentUserId) return;
+          if (senderId == currentUserId) return;
 
           // Si es un mensaje de otro usuario para esta conversación, lo muestra
           if (mounted) { // Verifica si el widget todavía está en el árbol
@@ -61,7 +63,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _messages.add(
                 ChatMessage(
                   text: decodedBody['ciphertext'], // Aún texto plano
-                  senderId: decodedBody['senderId'],
+                  senderId: senderId,
                   isMe: false, // Sabemos que no es nuestro por el filtro anterior
                 ),
               );
@@ -89,8 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
 
       if (otherParticipant != null) {
-        // Intenta obtener el 'username' si está disponible
-        // (Requerirá que el backend lo incluya en la respuesta)
+        // Usa el 'username' si está disponible (requiere que el backend lo envíe)
         final username = otherParticipant['username'] ?? 'Usuario ${otherParticipant['userId']}';
         chatTitle = 'Chat con $username';
       } else {
@@ -98,8 +99,6 @@ class _ChatScreenState extends State<ChatScreen> {
         chatTitle = 'Chat ${widget.conversationData['id']}';
       }
     }
-    // Llama a setState si _setupChatTitle se llama fuera de initState
-    // if (mounted) setState(() {});
   }
 
 
@@ -128,14 +127,15 @@ class _ChatScreenState extends State<ChatScreen> {
     // --- LÓGICA DE ENVÍO CORREGIDA ---
     // Obtenemos los IDs de TODOS los participantes de la conversación
     final List<dynamic>? participants = widget.conversationData['participants'];
+    // Aseguramos que los IDs sean enteros
     final List<int> allParticipantIds = participants
-            ?.map<int>((p) => p['userId'] as int)
-            .toList() ?? // Si participants es null, envía una lista vacía
-            [];
+            ?.map<int>((p) => (p['userId'] as num).toInt()) // Conversión explícita
+            .toList() ??
+            []; // Si participants es null, envía una lista vacía
 
     // Enviamos el mensaje junto con la lista de todos los participantes
     _socketService.sendMessage(
-      widget.conversationData['id'],
+      (widget.conversationData['id'] as num).toInt(), // Asegura que el ID es int
       messageText,
       allParticipantIds, // Lista de IDs para el mapa `encryptedKeys`
     );
