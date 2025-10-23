@@ -1,85 +1,159 @@
 // lib/services/auth_service.dart
 
-import 'package:flutter/material.dart';
-import '../api/auth_api.dart';
-import '../api/user_api.dart'; // <-- IMPORTANTE
-import 'crypto_service.dart';
+import 'dart:convert';
+// --- IMPORTACIONES CORREGIDAS ---
+import 'package:flutter/material.dart';       // Correcto: package:flutter/material.dart
+import 'package:http/http.dart' as http;      // Correcto: package:http/http.dart
+import 'package:jwt_decoder/jwt_decoder.dart'; // Correcto: package:jwt_decoder/jwt_decoder.dart
+// ---------------------------------
+import '../config/app_constants.dart';
 import 'secure_storage.dart';
+import 'crypto_service.dart';
+import '../api/user_api.dart';
 
-class AuthService with ChangeNotifier {
-  final _authApi = AuthApi();
-  final _userApi = UserApi(); // <-- AÑADIR
-  final _cryptoService = CryptoService();
-  final _storageService = SecureStorageService();
+class AuthService with ChangeNotifier { // Ahora ChangeNotifier debería ser reconocido
+  final SecureStorageService _storageService = SecureStorageService();
+  final CryptoService _cryptoService = CryptoService();
+  final UserApi _userApi = UserApi();
 
-  bool _isAuthenticated = false;
   String? _token;
-  int? _userId; // <-- VARIABLE PARA GUARDAR EL ID
+  int? _userId;
   String? _username;
 
-  bool get isAuthenticated => _isAuthenticated;
+  // --- GETTERS ---
   String? get token => _token;
-  int? get userId => _userId; // <-- GETTER PARA ACCEDER AL ID
+  int? get userId => _userId;
   String? get username => _username;
 
-  Future<void> _processLogin(String token) async {
-    _token = token;
-    await _storageService.saveToken(token);
-
-    // Llamamos a /api/users/me para obtener los datos del usuario
-    final userData = await _userApi.getMe(token);
-    _userId = userData['id'];
-    _username = userData['username'];
-    
-    _isAuthenticated = true;
+  bool get isAuthenticated {
+     try {
+       // JwtDecoder debería ser reconocido ahora
+       return _token != null && !JwtDecoder.isExpired(_token!);
+     } catch (e) {
+       print("Error al decodificar token en isAuthenticated: $e");
+       return false;
+     }
   }
 
-  Future<void> tryAutoLogin() async {
-    final storedToken = await _storageService.getToken();
-    if (storedToken != null) {
+  Future<void> init() async {
+    _token = await _storageService.getToken();
+    if (_token != null) {
+      bool isTokenExpired = false;
       try {
-        await _processLogin(storedToken);
-      } catch (e) {
-        _isAuthenticated = false;
+        isTokenExpired = JwtDecoder.isExpired(_token!); // JwtDecoder reconocido
+      } catch(e) {
+        print("AuthService: Error al decodificar token almacenado: $e. Eliminando token.");
+        isTokenExpired = true;
+      }
+
+      if (!isTokenExpired) {
+        try {
+          await _fetchAndSetUserData(_token!);
+          print("AuthService: Token cargado y válido para usuario $_username (ID: $_userId)");
+        } catch (e) {
+           print("AuthService: Error al obtener datos de usuario con token almacenado: $e");
+           _token = null;
+           _userId = null;
+           _username = null;
+           await _storageService.deleteToken();
+        }
+      } else {
+        print("AuthService: Token expirado o inválido, eliminando.");
+        _token = null;
+        _userId = null;
+        _username = null;
+        await _storageService.deleteToken();
+        await _storageService.deletePrivateKey();
       }
     } else {
-      _isAuthenticated = false;
+      print("AuthService: No se encontró token.");
     }
-    notifyListeners();
+     notifyListeners(); // notifyListeners reconocido
+  }
+
+  Future<void> _fetchAndSetUserData(String token) async {
+      final userData = await _userApi.getMe(token);
+      _userId = userData['id'];
+      _username = userData['username'];
   }
 
   Future<bool> register(String username, String email, String password) async {
     try {
-      final keys = await _cryptoService.generateRSAKeyPair();
-      final publicKey = keys['publicKey']!;
-      final privateKey = keys['privateKey']!;
-      
-      final response = await _authApi.register(username, email, password, publicKey);
+      print("AuthService: Generando par de claves RSA...");
+      final keyPair = await _cryptoService.generateRSAKeyPair();
+      final publicKey = keyPair['publicKey']!;
+      final privateKey = keyPair['privateKey']!;
 
-      if (response['success'] == true && response['token'] != null) {
-        await _processLogin(response['token']);
-        await _storageService.savePrivateKey(privateKey);
-        notifyListeners();
-        return true;
+      if (publicKey.isEmpty || privateKey.isEmpty) {
+        print("AuthService ERROR: Claves RSA generadas vacías.");
+        return false;
       }
-      return false;
+      print("AuthService: Claves RSA generadas con éxito.");
+      print("AuthService: Longitud de Clave Privada generada: ${privateKey.length}");
+
+      // http.post debería ser reconocido ahora
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/api/auth/register'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'username': username,
+          'email': email,
+          'password': password,
+          'publicKey': publicKey,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        _token = data['token'];
+        if (_token == null) {
+           print("AuthService ERROR: Backend no devolvió token en registro exitoso.");
+           return false;
+        }
+        await _fetchAndSetUserData(_token!);
+        await _storageService.saveToken(_token!);
+        print("AuthService: Token guardado con éxito.");
+        await _storageService.savePrivateKey(privateKey);
+        print("AuthService: Clave privada guardada con éxito.");
+        notifyListeners(); // reconocido
+        return true;
+      } else {
+        print("AuthService ERROR al registrar (Backend): ${response.statusCode} ${response.body}");
+        return false;
+      }
     } catch (e) {
-      print("Error en el registro: $e");
+      print("AuthService ERROR al registrar (General): $e");
       return false;
     }
   }
 
   Future<bool> login(String username, String password) async {
     try {
-      final response = await _authApi.login(username, password);
-      if (response['success'] == true && response['token'] != null) {
-        await _processLogin(response['token']);
-        notifyListeners();
+      // http.post reconocido
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'username': username, 'password': password}),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        _token = data['token'];
+        if (_token == null) {
+           print("AuthService ERROR: Backend no devolvió token en login exitoso.");
+           return false;
+        }
+        await _fetchAndSetUserData(_token!);
+        await _storageService.saveToken(_token!);
+        print("AuthService: Login exitoso. Token guardado.");
+        notifyListeners(); // reconocido
         return true;
+      } else {
+        print("AuthService ERROR al iniciar sesión (Backend): ${response.statusCode} ${response.body}");
+        return false;
       }
-      return false;
     } catch (e) {
-      print("Error en el login: $e");
+      print("AuthService ERROR al iniciar sesión (General): $e");
       return false;
     }
   }
@@ -88,8 +162,9 @@ class AuthService with ChangeNotifier {
     _token = null;
     _userId = null;
     _username = null;
-    _isAuthenticated = false;
-    await _storageService.deleteAll();
-    notifyListeners();
+    await _storageService.deleteToken();
+    await _storageService.deletePrivateKey();
+    notifyListeners(); // reconocido
+    print("AuthService: Sesión cerrada y token/clave eliminados.");
   }
-}
+} 

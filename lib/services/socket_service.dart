@@ -4,72 +4,102 @@ import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
 import 'dart:convert';
-import '../config/app_constants.dart'; // Asegúrate que la ruta sea correcta
+import '../config/app_constants.dart';
+import 'crypto_service.dart';
+import '../api/messaging_api.dart';
+// Quitamos AuthService si no se usa directamente aquí
 
 class SocketService {
   late StompClient _stompClient;
   bool isConnected = false;
+  // Flag para saber si _stompClient ha sido inicializado por connect()
+  bool _isStompClientInitialized = false;
+
+  final CryptoService _cryptoService = CryptoService();
+  final MessagingApi _messagingApi = MessagingApi();
+  String? _currentToken;
 
   void connect(String token, Function(StompFrame) onMessageReceived) {
-    _stompClient = StompClient(
+    _currentToken = token;
+    _stompClient = StompClient( // Aquí se inicializa
       config: StompConfig(
-        // Asegúrate que la URL base sea correcta
         url: '${AppConstants.baseUrl.replaceFirst('http', 'ws')}/ws',
         onConnect: (StompFrame frame) {
           isConnected = true;
           print("Conectado al WebSocket");
-
           _stompClient.subscribe(
-            destination: '/user/queue/messages', // Suscribe a la cola personal
+            destination: '/user/queue/messages',
             callback: onMessageReceived,
           );
         },
         onWebSocketError: (dynamic error) {
-             print("Error de WebSocket: ${error.toString()}");
-             isConnected = false; // Marcar como desconectado en caso de error
+          print("Error de WebSocket: ${error.toString()}");
+          isConnected = false;
         },
         stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
-        // Añadir reintentos de conexión por si acaso
         connectionTimeout: const Duration(seconds: 10),
         heartbeatOutgoing: const Duration(seconds: 20000),
         heartbeatIncoming: const Duration(seconds: 20000),
       ),
     );
+    _isStompClientInitialized = true; // Marcamos como inicializado
     _stompClient.activate();
   }
 
-  // --- MÉTODO CORREGIDO ---
-  // Ahora requiere la lista de IDs de los participantes
-  void sendMessage(int conversationId, String messageText, List<int> participantIds) {
-    if (!isConnected) {
-        print("No conectado al socket, no se puede enviar mensaje.");
-        return;
+  Future<void> sendMessage(int conversationId, String plainTextMessage, List<int> participantIds) async {
+    // ... (El método sendMessage no cambia, permanece igual que en la corrección anterior) ...
+    if (!isConnected || _currentToken == null) {
+      print("No conectado al socket o token no disponible, no se puede enviar mensaje.");
+      return;
     }
-
-    // Creamos el mapa `encryptedKeys`. El backend (`MessageService`)
-    // iterará sobre las *claves* de este mapa para saber a quién reenviar el mensaje.
-    final Map<String, String> encryptedKeysMap = {
-      for (var id in participantIds) id.toString(): 'placeholder_key' // El backend usa las claves (IDs)
-    };
-
-    _stompClient.send(
-      destination: '/app/chat.send', // Endpoint del backend para recibir mensajes
-      body: json.encode({
-        'conversationId': conversationId,
-        'ciphertext': messageText, // Por ahora, texto plano
-        'encryptedKeys': encryptedKeysMap, // Mapa con { "userId": "placeholder_key", ... }
-      }),
-    );
-    print('Mensaje enviado a conv $conversationId para usuarios: $participantIds');
+    try {
+      final aesKeyMap = _cryptoService.generateAESKeyAndIV();
+      final base64AesKey = aesKeyMap['key']!;
+      final base64AesIV = aesKeyMap['iv']!;
+      final ciphertext = _cryptoService.encryptAES(plainTextMessage, base64AesKey, base64AesIV);
+      final combinedKeyIV = _cryptoService.combineKeyIV(base64AesKey, base64AesIV);
+      final Map<String, String> encryptedKeysMap = {};
+      for (var userId in participantIds) {
+        try {
+          final publicKeyPem = await _messagingApi.getPublicKey(_currentToken!, userId);
+          final encryptedCombinedKey = await _cryptoService.encryptRSA(combinedKeyIV, publicKeyPem);
+          encryptedKeysMap[userId.toString()] = encryptedCombinedKey;
+        } catch (e) {
+          print("Error al obtener/cifrar clave para usuario $userId: $e. Omitiendo.");
+        }
+      }
+       if (encryptedKeysMap.isEmpty) {
+         print("Error crítico: No se pudo cifrar la clave AES para ningún destinatario.");
+         throw Exception("No se pudo cifrar la clave para ningún destinatario.");
+       }
+      _stompClient.send(
+        destination: '/app/chat.send',
+        body: json.encode({
+          'conversationId': conversationId,
+          'ciphertext': ciphertext,
+          'encryptedKeys': encryptedKeysMap,
+        }),
+      );
+      print('Mensaje CIFRADO enviado a conv $conversationId para usuarios: $participantIds');
+    } catch (e) {
+      print("Error general al cifrar o enviar mensaje: $e");
+      rethrow;
+    }
   }
 
+  // --- MÉTODO DISCONNECT CORREGIDO ---
   void disconnect() {
-    // Verifica si el cliente está activado antes de intentar desactivar
-    if (_stompClient.isActive) {
-        _stompClient.deactivate();
+    // Verificamos si el cliente fue inicializado Y si está activo antes de desactivar
+    if (_isStompClientInitialized && _stompClient.isActive) {
+      _stompClient.deactivate();
+      print("STOMP client desactivado.");
+    } else {
+       print("STOMP client no estaba activo o inicializado, no se necesita desactivar.");
     }
     isConnected = false;
-    print("Desconectado del WebSocket");
+    _currentToken = null;
+    _isStompClientInitialized = false; // Resetear al desconectar
+    print("Desconectado lógicamente del WebSocket");
   }
-}
+} // Fin de la clase SocketService

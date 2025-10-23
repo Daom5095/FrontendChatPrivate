@@ -19,17 +19,17 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  // Guardaremos la "promesa" (Future) en el estado para que solo se cree una vez.
-  late Future<void> _tryAutoLoginFuture;
-  
+  // Guardamos la "promesa" (Future) en el estado para que solo se cree una vez.
+  late Future<void> _initAuthFuture; // <-- Renombrado para claridad
+
   // El AuthService también se crea aquí para que persista.
   final AuthService _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
-    // Llamamos a tryAutoLogin UNA SOLA VEZ cuando el widget se inicializa.
-    _tryAutoLoginFuture = _authService.tryAutoLogin();
+    // Llamamos a init UNA SOLA VEZ cuando el widget se inicializa.
+    _initAuthFuture = _authService.init(); // <-- LLAMADA CORREGIDA a init()
   }
 
   @override
@@ -46,15 +46,16 @@ class _MyAppState extends State<MyApp> {
               visualDensity: VisualDensity.adaptivePlatformDensity,
             ),
             home: FutureBuilder(
-              // Usamos la promesa que guardamos en el estado. NO se vuelve a crear.
-              future: _tryAutoLoginFuture,
+              // Usamos la promesa que guardamos en el estado.
+              future: _initAuthFuture,
               builder: (context, snapshot) {
                 // Mientras la promesa inicial se completa, muestra la pantalla de carga.
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const SplashScreen();
                 }
                 // Una vez completada, decide qué pantalla mostrar basado en el estado.
-                return auth.isAuthenticated
+                // Usamos el getter corregido/añadido isAuthenticated
+                return auth.isAuthenticated // <-- GETTER CORREGIDO
                     ? const HomeScreen()
                     : const LoginScreen();
               },

@@ -12,38 +12,43 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _emailController = TextEditingController(); // Asegúrate de tener este controlador
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-Future<void> _submit() async {
+
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
     setState(() { _isLoading = true; });
 
     final authService = Provider.of<AuthService>(context, listen: false);
+
     final success = await authService.register(
       _usernameController.text,
       _emailController.text,
       _passwordController.text,
     );
 
-    if (!mounted) return;
-
+    if (!mounted) return; // Esta línea es CRÍTICA después de un await
 
     if (success) {
-      // Si el registro es exitoso, cerramos esta pantalla.
-      // El `Consumer` en `main.dart` se encargará de mostrar la `HomeScreen`.
-      Navigator.of(context).pop();
+      // Si el registro es exitoso, el Consumer en main.dart debería detectar
+      // el cambio en authService.isAuthenticated y navegar automáticamente
+      // a HomeScreen. No necesitamos hacer nada aquí.
+      print("Registro exitoso, estado notificado. La UI se actualizará automáticamente.");
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error en el registro. Inténtalo de nuevo.')),
+        const SnackBar(content: Text('Error en el registro. Verifica los datos o el usuario/email podría ya existir.')),
       );
+      // Solo detenemos el indicador de carga si el registro falla y la pantalla sigue montada.
+      if (mounted) {
+        setState(() { _isLoading = false; });
+      }
     }
-    // --------------------------------
-
-    setState(() { _isLoading = false; });
+  
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,7 +65,7 @@ Future<void> _submit() async {
                 decoration: const InputDecoration(labelText: 'Usuario'),
                 validator: (value) => value!.isEmpty ? 'Ingresa un usuario' : null,
               ),
-              TextFormField(
+              TextFormField( // Asegúrate de que el campo de email exista
                 controller: _emailController,
                 decoration: const InputDecoration(labelText: 'Email'),
                 keyboardType: TextInputType.emailAddress,
@@ -81,5 +86,14 @@ Future<void> _submit() async {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    // Es buena práctica liberar los controladores
+    _usernameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }

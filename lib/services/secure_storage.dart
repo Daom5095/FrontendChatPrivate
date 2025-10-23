@@ -1,50 +1,45 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+// lib/services/secure_storage.dart
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorageService {
-  final _storage = kIsWeb ? null : const FlutterSecureStorage();
-  final Map<String, String> _webStorage = {};
+  final _storage = const FlutterSecureStorage();
 
-  static const _tokenKey = 'jwt_token';
-  static const _privateKey = 'private_key';
+  static const _keyToken = 'token';
+  static const _keyUserId = 'userId'; // Esto parece que no se usa, pero es inocuo
+  static const _keyPrivateKey = 'privateKey'; // Clave para la clave privada
 
   Future<void> saveToken(String token) async {
-    if (kIsWeb) {
-      _webStorage[_tokenKey] = token;
-    } else {
-      await _storage?.write(key: _tokenKey, value: token);
-    }
+    await _storage.write(key: _keyToken, value: token);
   }
 
   Future<String?> getToken() async {
-    if (kIsWeb) {
-      return _webStorage[_tokenKey];
-    } else {
-      return await _storage?.read(key: _tokenKey);
-    }
+    return await _storage.read(key: _keyToken);
   }
 
+  Future<void> deleteToken() async {
+    await _storage.delete(key: _keyToken);
+  }
+
+  // --- MÉTODOS PARA CLAVE PRIVADA ---
   Future<void> savePrivateKey(String privateKey) async {
-    if (kIsWeb) {
-      _webStorage[_privateKey] = privateKey;
-    } else {
-      await _storage?.write(key: _privateKey, value: privateKey);
-    }
+    print("SecureStorageService: Intentando guardar clave privada de longitud ${privateKey.length}");
+    await _storage.write(key: _keyPrivateKey, value: privateKey);
+    print("SecureStorageService: Clave privada guardada.");
   }
 
   Future<String?> getPrivateKey() async {
-    if (kIsWeb) {
-      return _webStorage[_privateKey];
+    final key = await _storage.read(key: _keyPrivateKey);
+    if (key == null) {
+      print("SecureStorageService: No se encontró clave privada.");
     } else {
-      return await _storage?.read(key: _privateKey);
+      print("SecureStorageService: Clave privada cargada (longitud ${key.length}).");
     }
+    return key;
   }
 
-  Future<void> deleteAll() async {
-    if (kIsWeb) {
-      _webStorage.clear();
-    } else {
-      await _storage?.deleteAll();
-    }
+  Future<void> deletePrivateKey() async {
+    print("SecureStorageService: Eliminando clave privada.");
+    await _storage.delete(key: _keyPrivateKey);
   }
 }
