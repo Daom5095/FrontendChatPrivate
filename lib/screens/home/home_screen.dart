@@ -2,15 +2,17 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/auth_service.dart'; // Para logout y obtener token
-import '../../api/conversation_api.dart'; // ¡Necesitamos esto para cargar las conversaciones!
-import '../users/user_list_screen.dart'; // Para el botón de nuevo chat
-import '../chat/chat_screen.dart'; // Para navegar al chat existente
+import 'dart:math'; // Para generar colores aleatorios basados en ID
+import '../../services/auth_service.dart';
+import '../../api/conversation_api.dart';
+import '../users/user_list_screen.dart';
+import '../chat/chat_screen.dart';
+// Podríamos necesitar un paquete para formatear fechas más adelante
+// import 'package:intl/intl.dart';
 
 /// Pantalla principal después del login.
 /// Muestra la lista de conversaciones existentes del usuario.
 class HomeScreen extends StatefulWidget {
-  // Convertido a StatefulWidget para manejar la carga de conversaciones
   const HomeScreen({super.key});
 
   @override
@@ -18,104 +20,96 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Future para cargar la lista de conversaciones
   late Future<List<dynamic>> _conversationsFuture;
-
-  // Instancia de la API de conversaciones
   final ConversationApi _conversationApi = ConversationApi();
+
+  // Colores base para generar colores de avatar pseudo-aleatorios
+  final List<Color> _avatarBaseColors = [
+    Colors.blue, Colors.green, Colors.red, Colors.orange, Colors.purple,
+    Colors.teal, Colors.pink, Colors.indigo, Colors.amber, Colors.cyan,
+  ];
 
   @override
   void initState() {
     super.initState();
     print("HomeScreen [initState]: Cargando lista de conversaciones...");
-    // Iniciar la carga de conversaciones al construir la pantalla
     _loadConversations();
   }
 
-  /// Carga la lista de conversaciones del usuario desde la API del backend.
   Future<void> _loadConversations() async {
-    // Usar context.read para obtener AuthService sin escuchar cambios
     final authService = context.read<AuthService>();
     final token = authService.token;
 
-    // Validación: Si no hay token, no podemos cargar nada.
     if (token == null) {
-      print("HomeScreen [_loadConversations] ERROR: Token nulo. No se pueden cargar conversaciones.");
-      // Asignar un Future que falle para que FutureBuilder lo muestre
-      if (mounted) { // Verificar si el widget sigue montado antes de llamar a setState
+      print("HomeScreen [_loadConversations] ERROR: Token nulo.");
+      if (mounted) {
         setState(() {
-          _conversationsFuture = Future.error('No autenticado. No se pudo obtener el token.');
+          _conversationsFuture = Future.error('No autenticado.');
         });
       }
-      return; // Detener
+      return;
     }
 
-    // Si hay token, iniciamos la llamada a la API
-    // Asegurarse de que la llamada a setState ocurra solo si el widget está montado
     if (mounted) {
        setState(() {
-         // Llamamos al nuevo método `getConversations` que añadiremos a ConversationApi
-         _conversationsFuture = _conversationApi.getConversations(token); // Llama a GET /api/conversations
+         // Aseguramos que se inicie una nueva carga
+         _conversationsFuture = _conversationApi.getConversations(token);
        });
     }
   }
 
-  /// Navega a la pantalla de chat para una conversación específica.
   void _navigateToChat(Map<String, dynamic> conversationData) {
      print("HomeScreen [_navigateToChat]: Navegando a ChatScreen para conversación ID ${conversationData['id']}");
      Navigator.of(context).push(
         MaterialPageRoute(
-          // Pasamos los datos completos de la conversación a ChatScreen
           builder: (ctx) => ChatScreen(conversationData: conversationData),
         ),
      ).then((_) {
-        // Opcional: Recargar la lista de conversaciones cuando volvemos de un chat
-        // Esto podría ser útil si implementamos "último mensaje" o "no leídos"
+        // Recargar al volver, por si hay nuevos mensajes (aunque no los mostremos aún)
         print("HomeScreen: Volviendo de ChatScreen. Recargando conversaciones...");
         _loadConversations();
      });
   }
 
+  // --- NUEVO: Función para generar color de avatar ---
+  Color _getAvatarColor(int conversationId) {
+    // Usa el ID de la conversación para elegir un color de forma determinista
+    int index = conversationId % _avatarBaseColors.length;
+    return _avatarBaseColors[index];
+  }
+  // -------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    // Usamos context.watch aquí si quisiéramos reaccionar a cambios en AuthService (ej. logout)
-    // Pero para logout, el botón ya lo maneja explícitamente.
-    // Para el token en _loadConversations, usamos context.read.
     final authService = Provider.of<AuthService>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mis Chats'), // Título más específico
+        title: const Text('Mis Chats'),
         actions: [
-          // Botón para refrescar la lista de conversaciones
           IconButton(
              icon: const Icon(Icons.refresh),
              tooltip: "Actualizar conversaciones",
-             onPressed: _loadConversations, // Llama al método de carga
+             onPressed: _loadConversations,
           ),
-          // Botón de Logout
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Cerrar sesión",
             onPressed: () {
               print("HomeScreen: Botón Logout presionado.");
               authService.logout();
-              // AuthService notificará a los listeners (como en main.dart)
-              // y la navegación a LoginScreen ocurrirá automáticamente.
             },
           )
         ],
       ),
-      // Cuerpo principal: Usamos FutureBuilder para manejar la carga de conversaciones
       body: FutureBuilder<List<dynamic>>(
         future: _conversationsFuture,
         builder: (context, snapshot) {
-          // 1. Estado de Carga
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          // 2. Estado de Error
           if (snapshot.hasError) {
+             // ... (Widget de error con botón Reintentar - sin cambios) ...
              print("HomeScreen [FutureBuilder] Error: ${snapshot.error}");
             return Center(
                child: Padding(
@@ -130,16 +124,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       ElevatedButton.icon(
                          icon: const Icon(Icons.refresh),
                          label: const Text("Reintentar"),
-                         onPressed: _loadConversations, // Botón para reintentar
+                         onPressed: _loadConversations,
                       )
                     ],
                  ),
                )
              );
           }
-          // 3. Estado sin Datos (lista vacía)
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(
+             // ... (Mensaje de lista vacía - sin cambios) ...
+             return const Center(
                child: Padding(
                  padding: EdgeInsets.all(16.0),
                  child: Text(
@@ -151,34 +145,35 @@ class _HomeScreenState extends State<HomeScreen> {
              );
           }
 
-          // 4. Estado con Datos: Mostrar la lista de conversaciones
+          // --- Lista de Conversaciones con Mejoras Visuales ---
           final conversations = snapshot.data!;
           print("HomeScreen [FutureBuilder]: Mostrando ${conversations.length} conversaciones.");
 
-          return ListView.builder(
+          return ListView.separated( // Usamos separated para añadir divisores
             itemCount: conversations.length,
+            separatorBuilder: (context, index) => Divider( // Línea divisoria
+              height: 1, // Altura mínima
+              thickness: 0.5, // Grosor sutil
+              indent: 72, // Indentación para alinear con el texto (avatar + padding)
+              endIndent: 16,
+            ),
             itemBuilder: (ctx, index) {
               final conversation = conversations[index];
-              // Validar que la conversación es un mapa y tiene ID
               if (conversation is! Map<String, dynamic> || conversation['id'] == null) {
-                  print("HomeScreen [ListView] Warning: Datos de conversación inválidos en índice $index. Saltando.");
-                  return const SizedBox.shrink(); // No mostrar si los datos son incorrectos
+                  print("HomeScreen [ListView] Warning: Datos de conversación inválidos en índice $index.");
+                  return const SizedBox.shrink();
               }
 
-              // Determinar el título a mostrar para esta conversación
-              String displayTitle = "Conversación ${conversation['id']}"; // Fallback
-              String? lastMessage = "Inicia la conversación..."; // Placeholder
-              DateTime? lastMessageTime; // Placeholder
+              final conversationId = (conversation['id'] as num).toInt(); // Obtener ID para el color
 
-              // Intentar obtener un título más descriptivo (similar a ChatScreen)
+              // --- Lógica para determinar el título (sin cambios) ---
+              String displayTitle = "Conversación $conversationId";
               final explicitTitle = conversation['title'] as String?;
               final participants = conversation['participants'] as List?;
-              final currentUserId = authService.userId; // Obtener ID actual
-
+              final currentUserId = authService.userId;
               if (explicitTitle != null && explicitTitle.isNotEmpty) {
                  displayTitle = explicitTitle;
               } else if (participants != null && currentUserId != null) {
-                 // Buscar al otro participante en chats directos
                  final otherParticipant = participants.firstWhere(
                     (p) => p is Map && p['userId'] != null && p['userId'] != currentUserId,
                     orElse: () => null,
@@ -187,36 +182,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     final username = otherParticipant['username'] as String?;
                     displayTitle = username ?? 'Usuario ${otherParticipant['userId']}';
                  } else if (participants.isNotEmpty && participants.first['userId'] == currentUserId) {
-                    // Caso raro: chat solo conmigo mismo? O error en datos.
                     displayTitle = 'Chat contigo mismo';
                  }
               }
+              // --- Fin Lógica Título ---
 
-              // TODO: Aquí iría la lógica para obtener y mostrar el último mensaje y su hora
+              // --- Placeholders para último mensaje y hora ---
+              String lastMessageSnippet = "Toca para iniciar el chat..."; // Placeholder inicial
+              String lastMessageTime = ""; // Placeholder hora (vacío por ahora)
+              // TODO: Reemplazar con datos reales cuando se implemente
+              // ---------------------------------------------
 
-              // Construir el ListTile para esta conversación
+              // --- Construcción del ListTile Mejorado ---
               return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0), // Ajustar padding
                 leading: CircleAvatar(
-                   // Usar inicial del título o un icono de chat
-                  child: Text(displayTitle.isNotEmpty ? displayTitle[0].toUpperCase() : 'C'),
+                  backgroundColor: _getAvatarColor(conversationId), // Color basado en ID
+                  foregroundColor: Colors.white, // Color de la letra (inicial)
+                  child: Text(
+                      displayTitle.isNotEmpty ? displayTitle[0].toUpperCase() : 'C',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-                title: Text(displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(lastMessage ?? ''), // Mostrar último mensaje (placeholder)
-                // trailing: Text(lastMessageTime != null ? /* formatear hora */ : ''), // Mostrar hora (placeholder)
+                title: Text(
+                   displayTitle,
+                   style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600), // Estilo título
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis, // Evitar que el título se desborde
+                  ),
+                subtitle: Text(
+                   lastMessageSnippet,
+                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]), // Estilo subtítulo
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis, // Evitar desbordamiento
+                  ),
+                trailing: Text( // Elemento a la derecha para la hora
+                   lastMessageTime,
+                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey), // Estilo hora
+                  ),
                 onTap: () {
-                  // Navegar a la pantalla de chat al tocar
                   _navigateToChat(conversation);
                 },
               );
+              // --- Fin ListTile Mejorado ---
             },
-          ); // Fin ListView.builder
+          ); // Fin ListView.separated
         },
       ), // Fin FutureBuilder
-
-      // Botón flotante para iniciar nueva conversación (sin cambios)
       floatingActionButton: FloatingActionButton(
         tooltip: "Iniciar nueva conversación",
-        child: const Icon(Icons.add_comment_outlined), // Icono más descriptivo
+        child: const Icon(Icons.add_comment_outlined),
         onPressed: () {
           print("HomeScreen: Botón FAB presionado. Navegando a UserListScreen...");
           Navigator.of(context).push(
