@@ -30,27 +30,29 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.1
-  flutter_secure_storage: ^9.2.2
-  provider: ^6.1.2
+  http: ^1.5.0 
+  flutter_secure_storage: ^9.2.4 
+  provider: ^6.1.5+1 
   fast_rsa: ^3.8.5 
-  stomp_dart_client: ^1.0.2
-  jwt_decoder: ^2.0.1
-  encrypt: ^5.0.3
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  stomp_dart_client: ^1.0.3 
+  jwt_decoder: ^2.0.1 
+  encrypt: ^5.0.3     # Para AES
+  crypto: ^3.0.3      # Para funciones de hash y PBKDF2
+  pointycastle: ^3.9.1 # Dependencia de crypto para PBKDF2
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0 
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

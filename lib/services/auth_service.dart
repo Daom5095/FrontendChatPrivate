@@ -1,6 +1,7 @@
 // lib/services/auth_service.dart
 
 import 'dart:convert';
+import 'dart:typed_data'; // Para Uint8List
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:jwt_decoder/jwt_decoder.dart';
@@ -18,6 +19,9 @@ class AuthService with ChangeNotifier {
   int? _userId;
   String? _username;
 
+  // Clave privada RSA en memoria para la sesión actual (después de login/registro)
+  String? _sessionPrivateKey;
+
   String? get token => _token;
   int? get userId => _userId;
   String? get username => _username;
@@ -26,41 +30,35 @@ class AuthService with ChangeNotifier {
      try {
        return _token != null && !JwtDecoder.isExpired(_token!);
      } catch (e) {
-       print("Error al decodificar token en isAuthenticated: $e");
+       print("AuthService: Error al decodificar token en isAuthenticated: $e");
        return false;
      }
   }
 
+  /// Intenta cargar el token almacenado y validar la sesión al inicio.
+  /// NO carga la clave privada aquí, se hará bajo demanda o en login.
   Future<void> init() async {
-    // ... (El método init permanece igual que la versión anterior) ...
     _token = await _storageService.getToken();
     if (_token != null) {
       bool isTokenExpired = false;
       try {
         isTokenExpired = JwtDecoder.isExpired(_token!);
       } catch(e) {
-        print("AuthService: Error al decodificar token almacenado: $e. Eliminando token.");
-        isTokenExpired = true; // Tratar como expirado si no se puede decodificar
+        print("AuthService: Error al decodificar token almacenado: $e. Limpiando.");
+        isTokenExpired = true;
       }
 
       if (!isTokenExpired) {
         try {
-          await _fetchAndSetUserData(_token!);
-          print("AuthService: Token cargado y válido para usuario $_username (ID: $_userId)");
+          await _fetchAndSetUserData(_token!); // Obtener ID y nombre de usuario
+          print("AuthService: Sesión potencialmente válida para usuario $_username (ID: $_userId). Clave privada NO cargada aún.");
         } catch (e) {
-           print("AuthService: Error al obtener datos de usuario con token almacenado: $e");
-           _token = null;
-           _userId = null;
-           _username = null;
-           await _storageService.deleteToken();
+           print("AuthService: Error al obtener datos /me con token: $e. Limpiando.");
+           await _clearLocalSession(); // Limpiar token si /me falla
         }
       } else {
-        print("AuthService: Token expirado o inválido, eliminando.");
-        _token = null;
-        _userId = null;
-        _username = null;
-        await _storageService.deleteToken();
-        await _storageService.deletePrivateKey();
+        print("AuthService: Token expirado. Limpiando.");
+        await _clearLocalSession(); // Limpiar todo si el token expira
       }
     } else {
       print("AuthService: No se encontró token.");
@@ -68,67 +66,86 @@ class AuthService with ChangeNotifier {
      notifyListeners();
   }
 
+  /// Limpia el estado local (token, user data, clave en memoria) y storage.
+  Future<void> _clearLocalSession() async {
+      _token = null;
+      _userId = null;
+      _username = null;
+      _sessionPrivateKey = null;
+      await _storageService.deleteToken();
+      // ¡NO BORRAMOS la clave privada del secure storage en este punto!
+      // Podría ser un error temporal de red. Solo borramos el token.
+      //await _storageService.deletePrivateKey();
+  }
+
+  /// Obtiene datos del usuario (/me) y actualiza el estado interno.
   Future<void> _fetchAndSetUserData(String token) async {
       final userData = await _userApi.getMe(token);
-      // Asegurarse de convertir a int si viene como num
       _userId = (userData['id'] as num?)?.toInt();
       _username = userData['username'];
        if (_userId == null || _username == null) {
-         throw Exception("Datos de usuario (/me) inválidos recibidos del backend.");
+         throw Exception("Datos de usuario (/me) inválidos recibidos.");
        }
   }
 
 
-  // --- MÉTODO REGISTER CORREGIDO ---
-  // (Quitamos prints excesivos, corregimos acceso a privateKey)
+  /// **REGISTRO MODIFICADO:** Guarda clave privada cifrada en backend.
   Future<bool> register(String username, String email, String password) async {
-    String? localPrivateKey; // Variable local para la clave privada
+    String? generatedPrivateKey; // Guardar temporalmente para guardar localmente al final
     try {
+      // 1. Generar claves RSA
       print("AuthService: Generando par de claves RSA...");
       final keyPair = await _cryptoService.generateRSAKeyPair();
       final publicKey = keyPair['publicKey']!;
-      localPrivateKey = keyPair['privateKey']!; // Asignar a variable local
+      generatedPrivateKey = keyPair['privateKey']!; // Guardar la original
 
-      if (publicKey.isEmpty || localPrivateKey == null || localPrivateKey!.isEmpty) {
-        print("AuthService ERROR: Claves RSA generadas vacías o nulas.");
-        return false;
+      if (publicKey.isEmpty || generatedPrivateKey == null || generatedPrivateKey!.isEmpty) {
+        throw Exception("Claves RSA generadas vacías o nulas.");
       }
-      print("AuthService: Claves RSA generadas con éxito.");
+      print("AuthService: Claves RSA generadas.");
 
+      // 2. Derivar KEK y cifrar clave privada
+      print("AuthService: Derivando KEK y cifrando clave privada...");
+      final saltKek = _cryptoService.generateSecureRandomSalt();
+      final kekBytes = _cryptoService.deriveKeyFromPasswordPBKDF2(password, saltKek);
+      final encryptedKeyData = _cryptoService.encryptAES_GCM(generatedPrivateKey!, kekBytes);
+      final encryptedPrivateKeyB64 = encryptedKeyData['ciphertext']!;
+      final kekIvB64 = encryptedKeyData['iv']!; // IV usado para cifrar la clave privada
+      print("AuthService: Clave privada cifrada con KEK.");
+
+      // 3. Enviar datos al backend (NUEVO ENDPOINT o modificar existente)
+      // Asumiremos un endpoint modificado /api/auth/register que acepta los nuevos campos
+      print("AuthService: Enviando datos de registro al backend...");
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/auth/register'),
+        Uri.parse('${AppConstants.baseUrl}/api/auth/register'), // O el nuevo endpoint si lo creas
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'username': username,
           'email': email,
-          'password': password,
+          'password': password, // El backend hará el hash para login
           'publicKey': publicKey,
+          // Nuevos campos para recuperación
+          'kekSalt': base64Encode(saltKek),
+          'encryptedPrivateKey': encryptedPrivateKeyB64,
+          'kekIv': kekIvB64,
         }),
       );
 
+      // 4. Procesar respuesta del backend
       if (response.statusCode == 200) {
-        print("AuthService: Backend respondió OK (200).");
+        print("AuthService: Registro exitoso en backend.");
         final Map<String, dynamic> data = json.decode(response.body);
         _token = data['token'];
-        if (_token == null) {
-           print("AuthService ERROR: Backend no devolvió token en registro exitoso.");
-           return false;
-        }
-        print("AuthService: Token obtenido.");
+        if (_token == null) throw Exception("Backend no devolvió token.");
 
         await _fetchAndSetUserData(_token!);
-        print("AuthService: Datos del usuario (/me) obtenidos.");
-
         await _storageService.saveToken(_token!);
-        print("AuthService: Token guardado en storage.");
+        // Guardar la clave privada ORIGINAL (sin cifrar) localmente para la sesión actual
+        await _storageService.savePrivateKey(generatedPrivateKey!);
+        _sessionPrivateKey = generatedPrivateKey; // Guardar en memoria también
+        print("AuthService: Token y clave privada original guardados localmente.");
 
-        // Usar la variable local 'localPrivateKey'
-        await _storageService.savePrivateKey(localPrivateKey!);
-        print("AuthService: Clave privada guardada en storage.");
-
-        print("AuthService: Notificando listeners...");
         notifyListeners();
-        print("AuthService: Listeners notificados. Retornando true.");
         return true;
       } else {
         print("AuthService ERROR al registrar (Backend): ${response.statusCode} ${response.body}");
@@ -138,28 +155,53 @@ class AuthService with ChangeNotifier {
       print("AuthService ERROR al registrar (General): $e");
       return false;
     }
-  } // Fin register
+  }
 
-  // --- LOGIN ---
+  /// **LOGIN MODIFICADO:** Recupera y descifra la clave privada.
   Future<bool> login(String username, String password) async {
-    // ... (El método login permanece igual que la versión anterior) ...
-     try {
+    try {
+      // 1. Llamar al endpoint de login normal
+      print("AuthService: Iniciando login...");
       final response = await http.post(
         Uri.parse('${AppConstants.baseUrl}/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'username': username, 'password': password}),
       );
 
+      // 2. Procesar respuesta del backend
       if (response.statusCode == 200) {
+        print("AuthService: Login exitoso en backend.");
         final Map<String, dynamic> data = json.decode(response.body);
         _token = data['token'];
-        if (_token == null) {
-           print("AuthService ERROR: Backend no devolvió token en login exitoso.");
-           return false;
+        // --- RECUPERAR DATOS PARA DESCIFRADO ---
+        // Asumimos que el backend AHORA devuelve estos campos en el login exitoso
+        final kekSaltB64 = data['kekSalt'] as String?;
+        final encryptedPrivateKeyB64 = data['encryptedPrivateKey'] as String?;
+        final kekIvB64 = data['kekIv'] as String?;
+        // ----------------------------------------
+
+        if (_token == null || kekSaltB64 == null || encryptedPrivateKeyB64 == null || kekIvB64 == null) {
+          throw Exception("Respuesta de login incompleta del backend (faltan datos de clave cifrada).");
         }
+         print("AuthService: Token y datos de clave cifrada recibidos.");
+
+        // 3. Obtener datos del usuario (/me)
         await _fetchAndSetUserData(_token!);
+        print("AuthService: Datos del usuario (/me) obtenidos.");
+
+        // 4. Re-derivar KEK y descifrar clave privada RSA
+        print("AuthService: Derivando KEK y descifrando clave privada...");
+        final saltKek = base64Decode(kekSaltB64);
+        final kekBytes = _cryptoService.deriveKeyFromPasswordPBKDF2(password, saltKek);
+        final privateKey = _cryptoService.decryptAES_GCM(encryptedPrivateKeyB64, kekBytes, kekIvB64);
+        print("AuthService: Clave privada descifrada con éxito.");
+
+        // 5. Guardar token y clave privada DESCIFRADA localmente
         await _storageService.saveToken(_token!);
-        print("AuthService: Login exitoso. Token guardado.");
+        await _storageService.savePrivateKey(privateKey);
+        _sessionPrivateKey = privateKey; // Guardar en memoria
+        print("AuthService: Token y clave privada descifrada guardados localmente.");
+
         notifyListeners();
         return true;
       } else {
@@ -168,19 +210,41 @@ class AuthService with ChangeNotifier {
       }
     } catch (e) {
       print("AuthService ERROR al iniciar sesión (General): $e");
+      // Si falla el login, limpiar cualquier estado residual
+      await _clearLocalSession();
+      notifyListeners(); // Notificar que la autenticación falló
       return false;
     }
   }
 
-  // --- LOGOUT ---
+  /// Carga la clave privada desde SecureStorage si aún no está en memoria.
+  /// Se usa antes de entrar a un chat.
+  Future<String?> getPrivateKeyForSession() async {
+    if (_sessionPrivateKey != null) {
+      return _sessionPrivateKey;
+    }
+    print("AuthService: Cargando clave privada desde storage para la sesión...");
+    _sessionPrivateKey = await _storageService.getPrivateKey();
+    if (_sessionPrivateKey == null) {
+       print("AuthService: No se encontró clave privada en storage.");
+       // Podríamos intentar recuperarla si el token aún es válido? No con este modelo.
+    } else {
+       print("AuthService: Clave privada cargada desde storage.");
+    }
+    return _sessionPrivateKey;
+  }
+
+
+  /// **LOGOUT MODIFICADO:** Limpia también la clave en memoria.
   Future<void> logout() async {
-    // ... (El método logout permanece igual que la versión anterior) ...
+    print("AuthService: Cerrando sesión...");
     _token = null;
     _userId = null;
     _username = null;
+    _sessionPrivateKey = null; // Limpiar clave en memoria
     await _storageService.deleteToken();
-    await _storageService.deletePrivateKey();
+    await _storageService.deletePrivateKey(); // Limpiar clave en storage
     notifyListeners();
-    print("AuthService: Sesión cerrada y token/clave eliminados.");
+    print("AuthService: Sesión cerrada y datos locales eliminados.");
   }
-} // Fin clase
+}
