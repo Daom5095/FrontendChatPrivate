@@ -108,12 +108,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                 // --- Placeholder Logo/Icon ---
-                Icon(
-                  Icons.person_add_alt_1_rounded, // Icono de añadir usuario
-                  size: 60,
-                  color: Theme.of(context).primaryColor,
+                 
+                // --- CAMBIO: Placeholder Logo/Icon ---
+                Image.asset(
+                  'assets/images/my_logo.png', // Misma ruta del logo
+                  height: 60, // Ajusta el tamaño
+                  // Opcional: Manejar error si el logo no carga
+                  errorBuilder: (context, error, stackTrace) {
+                    return Icon(
+                      Icons.person_add_alt_1_rounded, 
+                      size: 60,
+                      color: Theme.of(context).primaryColor,
+                    );
+                  },
                 ),
+                // --- FIN CAMBIO ---
+
                 const SizedBox(height: 16),
                  Text(
                   'Únete a la conversación segura',
@@ -236,7 +246,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: _isLoading ? null : () => Navigator.of(context).pop(), // Simplemente volver
                   child: Text(
                      '¿Ya tienes cuenta? Inicia sesión',
-                      style: TextStyle(color: Theme.of(context).hintColor), // Usar color de acento
+                      style: TextStyle(color: Theme.of(context).hintColor), // Usar color de acento (DeepPurple)
                     ),
                 ),
               ],

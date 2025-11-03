@@ -98,12 +98,24 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center, // Centrar verticalmente
               crossAxisAlignment: CrossAxisAlignment.stretch, // Estirar elementos horizontalmente
               children: [
-                // --- Placeholder para Logo ---
-                Icon(
-                  Icons.lock_person_rounded, // Icono de seguridad
-                  size: 80,
-                  color: Theme.of(context).primaryColor, // Usar color primario del tema
+                
+                // --- CAMBIO: Placeholder para Logo ---
+                // Reemplaza 'my_logo.png' por el nombre real de tu archivo de logo
+                Image.asset(
+                  'assets/images/my_logo.png', // Asegúrate que esta ruta exista
+                  height: 80, // Ajusta el tamaño
+                  // Opcional: Manejar error si el logo no carga
+                  errorBuilder: (context, error, stackTrace) {
+                    // Si falla la carga del logo, muestra el icono original
+                    return Icon(
+                      Icons.lock_person_rounded, 
+                      size: 80,
+                      color: Theme.of(context).primaryColor,
+                    );
+                  },
                 ),
+                // --- FIN CAMBIO ---
+
                 const SizedBox(height: 24),
                 Text(
                   'Bienvenido',
@@ -190,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                   child: Text(
                      '¿No tienes cuenta? Regístrate aquí',
-                     style: TextStyle(color: Theme.of(context).primaryColor),
+                     style: TextStyle(color: Theme.of(context).primaryColor), // Usará Teal
                     ),
                 )
               ],

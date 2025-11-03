@@ -1,5 +1,6 @@
 // lib/screens/users/user_list_screen.dart
 
+import 'dart:math'; // <-- AÑADIDO
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart'; // Para obtener el token
@@ -26,6 +27,20 @@ class _UserListScreenState extends State<UserListScreen> {
 
   // Estado para mostrar un indicador de carga mientras se crea la conversación
   bool _isCreatingChat = false;
+
+  // === AÑADIDO: Lógica de colores para avatares ===
+  final List<Color> _avatarBaseColors = [
+    Colors.blue, Colors.green, Colors.red, Colors.orange, Colors.purple,
+    Colors.teal, Colors.pink, Colors.indigo, Colors.amber, Colors.cyan,
+  ];
+
+  Color _getAvatarColor(int userId) {
+    // Usa el ID del usuario para elegir un color de forma determinista
+    int index = userId % _avatarBaseColors.length;
+    return _avatarBaseColors[index];
+  }
+  // === FIN AÑADIDO ===
+
 
   @override
   void initState() {
@@ -181,10 +196,16 @@ class _UserListScreenState extends State<UserListScreen> {
 
                   // Crear el ListTile para cada usuario
                   return ListTile(
+                    // === CAMBIO AQUÍ ===
                     leading: CircleAvatar(
-                      // Mostrar la inicial del nombre de usuario
-                      child: Text(username.isNotEmpty ? username[0].toUpperCase() : '?'),
+                      backgroundColor: _getAvatarColor(userId), // Aplicar color
+                      foregroundColor: Colors.white, // Letra blanca
+                      child: Text(
+                        username.isNotEmpty ? username[0].toUpperCase() : '?',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
+                    // === FIN CAMBIO ===
                     title: Text(username),
                     // subtitle: Text('ID: $userId'), // Opcional: mostrar ID
                     onTap: () {
