@@ -39,6 +39,10 @@ dependencies:
   encrypt: ^5.0.3     # Para AES
   crypto: ^3.0.3      # Para funciones de hash y PBKDF2
   pointycastle: ^3.9.1 # Dependencia de crypto para PBKDF2
+  uuid: ^4.4.0
+  flutter_chat_ui: ^1.6.7
+  flutter_chat_types: ^3.5.0
+
 
   cupertino_icons: ^1.0.8
   google_fonts: ^6.3.2
