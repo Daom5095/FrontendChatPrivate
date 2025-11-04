@@ -2,16 +2,19 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart'; // 1. IMPORTAR Google Fonts
+import 'package:google_fonts/google_fonts.dart'; // Para las fuentes personalizadas
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 
 void main() {
+  // Punto de entrada principal de la aplicación Flutter.
   runApp(const MyApp());
 }
 
+/// El widget raíz de mi aplicación.
+/// Es un StatefulWidget para poder manejar la inicialización de servicios.
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -20,13 +23,17 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  // Instancia única de mi servicio de autenticación.
   final AuthService _authService = AuthService();
+  // Un Future que representa la inicialización del servicio (cargar token, etc.)
   late final Future<void> _initAuthFuture;
 
   @override
   void initState() {
     super.initState();
     print("MyApp [initState]: Iniciando AuthService...");
+    // Llamo al método init() de AuthService. Este intentará cargar un token
+    // almacenado para ver si ya hay una sesión activa.
     _initAuthFuture = _authService.init();
     print("MyApp [initState]: Llamada a AuthService.init() realizada.");
   }
@@ -34,22 +41,29 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     
-    // --- NUEVA PALETA DE COLORES (BASADA EN TU IMAGEN) ---
+    // --- Defino mi paleta de colores personalizada ---
+    // (Basada en el logo y un estilo moderno)
     const Color primaryBlue = Color(0xFF23518C);      // Azul medio vibrante
     const Color accentPeriwinkle = Color(0xFF899DD9); // Azul lavanda claro
     const Color textAlmostBlack = Color(0xFF0D1826);   // Azul muy oscuro (casi negro)
     const Color textMutedBlueGrey = Color(0xFF8F9FBF); // Gris azulado apagado
     // --- FIN PALETA ---
 
+    // ChangeNotifierProvider expone mi AuthService al árbol de widgets.
+    // Usamos .value porque la instancia ya fue creada (_authService).
     return ChangeNotifierProvider.value(
       value: _authService,
       child: Consumer<AuthService>(
+        // Consumer reconstruye la app cuando AuthService llama a notifyListeners()
+        // (por ejemplo, después de login o logout).
         builder: (ctx, auth, _) {
           return MaterialApp(
             title: 'Chat Privado Seguro',
-            debugShowCheckedModeBanner: false,
+            debugShowCheckedModeBanner: false, // Oculto el banner de "Debug"
 
-            // --- 2. CONFIGURACIÓN DEL TEMA VISUAL (ACTUALIZADA) ---
+            // --- --------------------------------- ---
+            // --- INICIO DE CONFIGURACIÓN DEL TEMA  ---
+            // --- --------------------------------- ---
             theme: ThemeData(
               // **Paleta de Colores**
               primarySwatch: Colors.blue, // Base genérica
@@ -60,7 +74,7 @@ class _MyAppState extends State<MyApp> {
               cardColor: Colors.white, 
               dividerColor: Colors.grey[200], // Un gris neutro claro
 
-              // **Tipografía (Lato)**
+              // **Tipografía (Usando Google Fonts - Lato)**
               textTheme: GoogleFonts.latoTextTheme( 
                 Theme.of(context).textTheme,
               ).copyWith( 
@@ -82,7 +96,7 @@ class _MyAppState extends State<MyApp> {
               appBarTheme: AppBarTheme(
                 backgroundColor: Colors.white, // AppBar blanca
                 foregroundColor: textAlmostBlack, // Iconos y texto en el color más oscuro
-                elevation: 1, 
+                elevation: 1, // Sombra sutil
                 titleTextStyle: GoogleFonts.lato(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -95,7 +109,7 @@ class _MyAppState extends State<MyApp> {
                   foregroundColor: Colors.white, // Texto blanco
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), 
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
+                    borderRadius: BorderRadius.circular(25), // Bordes redondeados
                   ),
                 ),
               ),
@@ -136,24 +150,35 @@ class _MyAppState extends State<MyApp> {
 
                visualDensity: VisualDensity.adaptivePlatformDensity, 
             ),
-            // --- FIN CONFIGURACIÓN DEL TEMA ---
+            // --- ------------------------------- ---
+            // --- FIN CONFIGURACIÓN DEL TEMA      ---
+            // --- ------------------------------- ---
 
-            // --- Lógica de Navegación Inicial (sin cambios) ---
+            // --- Lógica de Navegación Inicial ---
             home: FutureBuilder(
+              // Espero a que el Future _initAuthFuture (AuthService.init()) termine
               future: _initAuthFuture,
               builder: (context, snapshot) {
+                
+                // 1. Mientras está cargando (esperando a init())
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   print("MyApp [FutureBuilder]: AuthService.init() en progreso. Mostrando SplashScreen.");
-                  return const SplashScreen();
+                  return const SplashScreen(); // Muestro pantalla de carga
                 }
+
+                // 2. Si init() falló (muy raro, pero posible)
                 if (snapshot.hasError) {
                    print("MyApp [FutureBuilder]: ERROR durante AuthService.init(): ${snapshot.error}. Mostrando LoginScreen como fallback.");
+                   // Muestro Login como fallback seguro
                    return const LoginScreen();
                 }
+
+                // 3. Cuando init() termina (con o sin sesión válida)
                 print("MyApp [FutureBuilder]: AuthService.init() completado. Estado Auth: ${auth.isAuthenticated}");
+                // Reviso el estado de `auth` (gracias al Consumer) para decidir qué pantalla mostrar.
                 return auth.isAuthenticated
-                    ? const HomeScreen()
-                    : const LoginScreen();
+                    ? const HomeScreen()   // Si está autenticado, voy al Home
+                    : const LoginScreen(); // Si no, voy al Login
               },
             ),
           );

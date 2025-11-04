@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../config/app_constants.dart'; // Asegúrate que la ruta sea correcta
+import '../config/app_constants.dart'; // Para la baseUrl
 
 /// Mi clase para interactuar con los endpoints /api/users del backend.
 class UserApi {
@@ -10,8 +10,11 @@ class UserApi {
 
   /// Obtiene los datos (ID, username) del usuario actualmente autenticado.
   /// Llama a GET /api/users/me.
-  /// Devuelve un Map<String, dynamic> con los datos del usuario.
-  /// Lanza una excepción si la llamada falla (error de red, token inválido, etc.).
+  ///
+  /// Requiere el token JWT para autenticación.
+  ///
+  /// Devuelve un Map<String, dynamic> con los datos del usuario (UserDto).
+  /// Lanza una excepción si la llamada falla.
   Future<Map<String, dynamic>> getMe(String token) async {
     print("UserApi [getMe]: Solicitando datos del usuario actual...");
     try {
@@ -30,29 +33,31 @@ class UserApi {
         print("UserApi [getMe]: Datos recibidos: $userData");
         return userData;
       } else {
-        // Manejar errores de la API (ej: 401 Unauthorized, 403 Forbidden, 500 Internal Server Error)
+        // Manejar errores de la API (ej: 401 Unauthorized, 500 Error)
         String errorMessage = 'Error desconocido al obtener datos del usuario.';
         try {
-           // Intentar decodificar el cuerpo de error JSON del backend
            final errorBody = jsonDecode(response.body);
            errorMessage = errorBody['error'] ?? errorBody['message'] ?? response.body;
         } catch (_) {
            errorMessage = response.body; // Si no es JSON, usar el cuerpo tal cual
         }
         print("UserApi [getMe] Error: $errorMessage (Status: ${response.statusCode})");
-        // Lanzar excepción con el mensaje de error
+        // Lanzo excepción para que el llamador (AuthService) lo maneje
         throw Exception('Error al obtener datos del usuario: $errorMessage');
       }
     } catch (e) {
-      // Manejar errores de red u otros errores inesperados
+      // Manejar errores de red u otros
       print("UserApi [getMe] Excepción: $e");
-      // Re-lanzar para que el llamador (AuthService) lo maneje
+      // Re-lanzo para que AuthService lo maneje
       throw Exception('No se pudo conectar al servidor para obtener datos del usuario: ${e.toString()}');
     }
   }
 
   /// Obtiene una lista de todos los usuarios registrados, excluyendo al usuario actual.
-  /// Llama a GET /api/users.
+  /// Llama a GET /api/users. (El backend se encarga de excluir al usuario actual).
+  ///
+  /// Requiere el token JWT para autenticación.
+  ///
   /// Devuelve una List<dynamic> donde cada elemento es un Map<String, dynamic> (UserDto).
   /// Lanza una excepción si la llamada falla.
   Future<List<dynamic>> getAllUsers(String token) async {

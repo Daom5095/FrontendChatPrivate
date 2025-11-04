@@ -3,53 +3,83 @@
 import 'dart:convert'; // Para base64Encode/Decode
 import 'dart:typed_data'; // Para Uint8List
 import 'package:flutter/material.dart';
-// import 'package:http/http.dart' as http; // <-- YA NO SE USA http DIRECTAMENTE
 import 'package:jwt_decoder/jwt_decoder.dart';
-// import '../config/app_constants.dart'; // <-- YA NO SE USA AppConstants DIRECTAMENTE
 import 'secure_storage.dart';
 import 'crypto_service.dart';
-import '../api/user_api.dart'; // Aún necesitamos UserApi para /me
-import '../api/auth_api.dart'; // <-- ¡IMPORTAMOS LA API ACTUALIZADA!
+import '../api/user_api.dart'; 
+import '../api/auth_api.dart'; 
 
 /// Mi servicio central para manejar todo lo relacionado con la autenticación.
-/// Utiliza ChangeNotifier para notificar a la UI sobre cambios en el estado de autenticación.
+///
+/// Utiliza `ChangeNotifier` (de Provider) para notificar a la UI
+/// (específicamente a `main.dart`) sobre cambios en el estado de autenticación
+/// (ej. login o logout).
+///
+/// Esta clase orquesta la lógica de negocio, llamando a:
+/// - `AuthApi` y `UserApi` para la comunicación de red.
+/// - `CryptoService` para las operaciones criptográficas.
+/// - `SecureStorageService` para persistir la sesión.
 class AuthService with ChangeNotifier {
-  // Mis ayudantes: Api de autenticación, almacenamiento, cripto, api de usuario
-  final AuthApi _authApi = AuthApi(); // <-- USAMOS AuthApi
+  // --- Mis Ayudantes ---
+  /// El cliente API para endpoints /api/auth
+  final AuthApi _authApi = AuthApi();
+  /// Mi wrapper para FlutterSecureStorage
   final SecureStorageService _storageService = SecureStorageService();
+  /// Mi caja de herramientas criptográficas
   final CryptoService _cryptoService = CryptoService();
+  /// El cliente API para endpoints /api/users
   final UserApi _userApi = UserApi(); // Para obtener datos del usuario post-login/registro
 
-  // Estado interno de la sesión
+  // --- Estado Interno de la Sesión ---
+  /// El token JWT, `null` si no está autenticado.
   String? _token;
+  /// El ID del usuario actual.
   int? _userId;
+  /// El nombre del usuario actual.
   String? _username;
 
-  // Clave privada RSA en memoria para la sesión actual (después de login/registro)
-  // La guardo aquí para no tener que leerla del storage a cada rato.
+  /// La clave privada RSA (en formato PEM) del usuario.
+  /// La guardo aquí en memoria *después* del login/registro para
+  /// no tener que leerla del `SecureStorage` (que es lento)
+  /// cada vez que necesite descifrar un mensaje.
   String? _sessionPrivateKey;
 
-  // Getters públicos para que la UI acceda al estado.
+  // --- Getters Públicos ---
+  /// Devuelve el token JWT actual.
   String? get token => _token;
+  /// Devuelve el ID del usuario actual.
   int? get userId => _userId;
+  /// Devuelve el nombre del usuario actual.
   String? get username => _username;
 
   /// Verifica si hay un token y si no ha expirado.
+  ///
   /// Maneja posibles errores al decodificar un token corrupto.
+  /// La UI escucha este getter (indirectamente vía Consumer)
+  /// para decidir si muestra `LoginScreen` o `HomeScreen`.
   bool get isAuthenticated {
      try {
        // Hay token Y no está expirado? Entonces sí está autenticado.
        return _token != null && !JwtDecoder.isExpired(_token!);
      } catch (e) {
-       // Si el token está malformado, JwtDecoder.isExpired lanza error. Lo considero no autenticado.
+       // Si el token está malformado, JwtDecoder.isExpired lanza error.
+       // Lo considero no autenticado.
        print("AuthService: Error al decodificar token en isAuthenticated: $e");
        return false;
      }
   }
 
   /// Intenta cargar el token almacenado y validar la sesión al inicio de la app.
-  /// Obtiene los datos del usuario (/me) si el token es válido.
-  /// NO carga la clave privada aquí; eso se hace en login o bajo demanda.
+  ///
+  /// Este método es llamado por `main.dart` al arrancar.
+  /// 1. Intenta leer el token del `SecureStorage`.
+  /// 2. Si existe y no está expirado, llama a `_fetchAndSetUserData` (GET /api/users/me).
+  /// 3. Si `_fetchAndSetUserData` falla (ej. token revocado), limpia el token local.
+  /// 4. Si el token está expirado o no existe, simplemente no hace nada.
+  /// 5. Finalmente, notifica a los listeners (main.dart) que la inicialización terminó.
+  ///
+  /// **Importante:** NO carga la clave privada aquí; eso se hace solo
+  /// durante `login` o `register`, o bajo demanda (`getPrivateKeyForSession`).
   Future<void> init() async {
     print("AuthService: Iniciando... Intentando cargar token.");
     _token = await _storageService.getToken(); // Intenta leer del storage
@@ -74,22 +104,32 @@ class AuthService with ChangeNotifier {
         } catch (e) {
            // Si /me falla (ej. token revocado en backend, backend caído)
            print("AuthService: Error al obtener datos /me con token: $e. Limpiando token local.");
-           await _clearLocalSession(clearPrivateKey: false); // Limpiar solo token, no clave!
+           // Limpiamos la sesión local, PERO mantenemos la clave privada en el storage.
+           // El fallo de /me podría ser temporal, y si el usuario vuelve a hacer login
+           // (con la contraseña correcta), podrá descifrar su clave.
+           await _clearLocalSession(clearPrivateKey: false);
         }
       } else {
         // Si el token está expirado
         print("AuthService: Token expirado. Limpiando sesión local.");
-        await _clearLocalSession(clearPrivateKey: true); // Limpiar todo si el token expira
+        // Si el token expira, es más seguro borrar todo, incluida la clave.
+        await _clearLocalSession(clearPrivateKey: true);
       }
     } else {
       // Si no había token guardado
       print("AuthService: No se encontró token almacenado.");
     }
      // Notifica a la UI (ej. a main.dart) que la inicialización terminó.
+     // Esto hará que el FutureBuilder en main.dart se resuelva.
      notifyListeners();
   }
 
   /// Limpia el estado local (token, user data, clave en memoria) y opcionalmente la clave del storage.
+  ///
+  /// - `clearPrivateKey`:
+  ///   - `true`: Borra todo (logout, registro fallido, token expirado).
+  ///   - `false`: Borra token y sesión en memoria, pero MANTIENE la clave privada
+  ///     en `SecureStorage` (ej. fallo temporal de /me).
   Future<void> _clearLocalSession({required bool clearPrivateKey}) async {
       _token = null;
       _userId = null;
@@ -97,8 +137,6 @@ class AuthService with ChangeNotifier {
       _sessionPrivateKey = null; // Borra la clave de la memoria
       await _storageService.deleteToken(); // Borra el token del storage
 
-      // Borrar la clave privada del storage SOLO si es un logout explícito o el token expiró.
-      // No la borramos si solo falló la llamada a /me (podría ser temporal).
       if (clearPrivateKey) {
         print("AuthService: Borrando también la clave privada del storage.");
         await _storageService.deletePrivateKey();
@@ -107,12 +145,15 @@ class AuthService with ChangeNotifier {
       }
   }
 
-  /// Obtiene datos del usuario (/api/users/me) usando el token y actualiza el estado interno.
+  /// Obtiene datos del usuario (GET /api/users/me) usando el token y actualiza el estado interno.
   Future<void> _fetchAndSetUserData(String token) async {
-      final userData = await _userApi.getMe(token); // Llama a la API
+      // Llama a la API
+      final userData = await _userApi.getMe(token);
+      
       // Asegurarse de convertir el ID a int correctamente
       _userId = (userData['id'] as num?)?.toInt();
       _username = userData['username'];
+      
        // Validar que recibimos lo esperado
        if (_userId == null || _username == null) {
          throw Exception("Datos de usuario (/me) inválidos o incompletos recibidos del backend.");
@@ -120,10 +161,27 @@ class AuthService with ChangeNotifier {
   }
 
 
-  /// **REGISTRO REFACTORIZADO:** Usa `_authApi.register`.
-  /// 1. Realiza la lógica criptográfica (generar claves, derivar KEK, cifrar privada).
-  /// 2. Llama a `AuthApi.register` para enviar los datos al backend.
-  /// 3. Si `AuthApi` devuelve éxito, guarda el token y la clave privada ORIGINAL localmente.
+  /// **Lógica de REGISTRO (Refactorizada).**
+  ///
+  /// Orquesta todo el proceso de registro:
+  /// 1. **Criptografía (Local):**
+  ///    - Genera un nuevo par de claves RSA (`_cryptoService.generateRSAKeyPair`).
+  ///    - Genera un `saltKek` aleatorio.
+  ///    - Deriva la KEK (Key Encryption Key) desde la `password` y `saltKek` (`_cryptoService.deriveKeyFromPasswordPBKDF2`).
+  ///    - Cifra la nueva clave privada RSA con la KEK (`_cryptoService.encryptAES_GCM`).
+  /// 2. **Llamada a API (Red):**
+  ///    - Llama a `_authApi.register` enviando *todo* al backend (username, email, pass,
+  ///      publicKey, kekSalt, encryptedPrivateKey, kekIv).
+  /// 3. **Procesar Éxito (Local):**
+  ///    - Si la API devuelve éxito (`success: true` y un `token`):
+  ///    - Guarda el nuevo `_token` en estado y storage.
+  ///    - Llama a `_fetchAndSetUserData` para obtener el ID y username del nuevo usuario.
+  ///    - Guarda la clave privada **ORIGINAL** (sin cifrar) en `_sessionPrivateKey` y en `SecureStorage`.
+  ///    - Notifica a la UI (via `notifyListeners`) que el estado de auth cambió.
+  /// 4. **Procesar Fallo:**
+  ///    - Si algo falla (cripto, red, o la API devuelve `success: false`),
+  ///      captura la excepción, limpia *toda* la sesión (`_clearLocalSession(clearPrivateKey: true)`)
+  ///      y devuelve `false`.
   Future<bool> register(String username, String email, String password) async {
     String? generatedPrivateKey; // Variable local temporal para guardar la clave generada
     try {
@@ -199,11 +257,28 @@ class AuthService with ChangeNotifier {
     }
   }
 
-  /// **LOGIN REFACTORIZADO:** Usa `_authApi.login`.
-  /// 1. Llama a `AuthApi.login`.
-  /// 2. Si `AuthApi` devuelve éxito, extrae token y datos criptográficos.
-  /// 3. Realiza la lógica criptográfica (re-derivar KEK, descifrar privada).
-  /// 4. Guarda el token y la clave privada DESCIFRADA localmente.
+  /// **Lógica de LOGIN (Refactorizada).**
+  ///
+  /// Orquesta todo el proceso de login:
+  /// 1. **Llamada a API (Red):**
+  ///    - Llama a `_authApi.login` (username, password).
+  /// 2. **Procesar Respuesta API:**
+  ///    - Si la API devuelve éxito (`success: true`), extrae el `token` y
+  ///      los datos criptográficos (`kekSalt`, `encryptedPrivateKey`, `kekIv`).
+  ///    - Llama a `_fetchAndSetUserData` para obtener ID y username.
+  /// 3. **Criptografía (Local):**
+  ///    - Re-deriva la KEK usando la `password` ingresada y el `kekSalt` recibido
+  ///      (`_cryptoService.deriveKeyFromPasswordPBKDF2`).
+  ///    - Descifra la `encryptedPrivateKey` usando la KEK y el `kekIv`
+  ///      (`_cryptoService.decryptAES_GCM`).
+  /// 4. **Guardar Estado (Local):**
+  ///    - Si el descifrado es exitoso, guarda el `_token` y la clave privada
+  ///      **DESCIFRADA** en `_sessionPrivateKey` y en `SecureStorage`.
+  ///    - Notifica a la UI (via `notifyListeners`).
+  /// 5. **Procesar Fallo:**
+  ///    - Si algo falla (red, API, o descifrado), captura la excepción,
+  ///      limpia *toda* la sesión (`_clearLocalSession(clearPrivateKey: true)`)
+  ///      y devuelve `false`.
   Future<bool> login(String username, String password) async {
     try {
       // --- PASO 1: Llamada a la API (delegada a AuthApi) ---
@@ -241,9 +316,10 @@ class AuthService with ChangeNotifier {
         print("AuthService [Login]: Clave privada RSA descifrada.");
         // Validar que la clave descifrada no esté vacía
         if (privateKey.isEmpty) {
-          // Esto podría indicar contraseña incorrecta si el descifrado falla silenciosamente,
-          // o un problema grave si la clave guardada estaba corrupta.
-          throw Exception("Error crítico: La clave privada descifrada está vacía. ¿Contraseña incorrecta?");
+          // Si el descifrado falla (ej. contraseña incorrecta), decryptAES_GCM
+          // lanzará un error que será capturado por el catch general.
+          // Esta validación es una doble seguridad.
+          throw Exception("Error crítico: La clave privada descifrada está vacía.");
         }
         // --- Fin Lógica Criptográfica ---
 
@@ -264,7 +340,7 @@ class AuthService with ChangeNotifier {
         throw Exception(errorMessage);
       }
     } catch (e) {
-      // Captura errores de red (AuthApi), criptográficos, o de lógica
+      // Captura errores de red (AuthApi), criptográficos (contraseña incorrecta), o de lógica
       print("AuthService [Login] ERROR (General): $e");
       // Limpiar sesión local si falla el login (más seguro borrar todo)
       await _clearLocalSession(clearPrivateKey: true);
@@ -274,19 +350,24 @@ class AuthService with ChangeNotifier {
   }
 
   /// Carga la clave privada desde SecureStorage si aún no está en memoria.
-  /// Se usa típicamente antes de entrar a un chat o realizar una operación criptográfica.
+  ///
+  /// Se usa típicamente antes de entrar a un chat (`HomeScreen`, `ChatScreen`)
+  /// para asegurarse de que la clave esté disponible para descifrar mensajes.
   Future<String?> getPrivateKeyForSession() async {
     // Si ya la tenemos en memoria, la devolvemos directamente.
     if (_sessionPrivateKey != null) {
       print("AuthService [getPrivateKeyForSession]: Usando clave privada en memoria.");
       return _sessionPrivateKey;
     }
+    
     // Si no, intentamos cargarla desde el almacenamiento seguro.
     print("AuthService [getPrivateKeyForSession]: Cargando clave privada desde storage...");
     _sessionPrivateKey = await _storageService.getPrivateKey();
+    
     if (_sessionPrivateKey == null) {
        print("AuthService [getPrivateKeyForSession]: ADVERTENCIA: No se encontró clave privada en storage.");
-       // Esto es un estado potencialmente problemático. La UI (ChatScreen) debería manejarlo.
+       // Esto es un estado potencialmente problemático.
+       // La UI (ChatScreen) debe manejar este null y mostrar un error.
     } else {
        print("AuthService [getPrivateKeyForSession]: Clave privada cargada desde storage.");
     }
@@ -295,6 +376,8 @@ class AuthService with ChangeNotifier {
 
 
   /// **LOGOUT:** Limpia el estado, el token y la clave privada de memoria y storage.
+  ///
+  /// Llama a `_clearLocalSession` forzando el borrado de la clave privada.
   Future<void> logout() async {
     print("AuthService: Cerrando sesión...");
     await _clearLocalSession(clearPrivateKey: true); // Asegura borrar todo
@@ -302,4 +385,4 @@ class AuthService with ChangeNotifier {
     print("AuthService: Sesión cerrada y datos locales eliminados.");
   }
 
-} // Fin AuthService
+} 

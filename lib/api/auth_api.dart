@@ -1,15 +1,19 @@
 // lib/api/auth_api.dart
 
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config/app_constants.dart'; // Asegúrate que la ruta sea correcta
+import 'package:http/http.dart' as http; // Para realizar las peticiones HTTP
+import '../config/app_constants.dart'; // Para obtener la baseUrl
 
 /// Mi clase dedicada a realizar las llamadas HTTP a los endpoints de autenticación del backend.
 class AuthApi {
-  final String _baseUrl = AppConstants.baseUrl; // URL base de mi backend
+  // URL base de mi backend
+  final String _baseUrl = AppConstants.baseUrl; 
 
-  /// **REGISTRO ACTUALIZADO:** Llama al endpoint /api/auth/register del backend.
-  /// Ahora acepta todos los campos necesarios, incluyendo los criptográficos.
+  /// **REGISTRO:** Llama al endpoint POST /api/auth/register del backend.
+  ///
+  /// Envía todos los datos del usuario, incluyendo los campos criptográficos
+  /// (clave pública, clave privada cifrada, salt de la KEK, e IV de la KEK).
+  ///
   /// Devuelve un mapa con `success: true` y el `token` si el registro es exitoso.
   /// Devuelve un mapa con `success: false` y un `message` si falla.
   Future<Map<String, dynamic>> register({
@@ -17,10 +21,10 @@ class AuthApi {
     required String email,
     required String password,
     required String publicKey,
-    // --- Campos Criptográficos Añadidos ---
-    required String kekSalt, // Base64
-    required String encryptedPrivateKey, // Base64
-    required String kekIv, // Base64
+    // --- Campos Criptográficos ---
+    required String kekSalt, // Salt (Base64) usado para derivar la KEK
+    required String encryptedPrivateKey, // Clave privada (Base64) cifrada con la KEK
+    required String kekIv, // IV (Base64) usado para cifrar la clave privada
     // ------------------------------------
   }) async {
     try {
@@ -28,11 +32,11 @@ class AuthApi {
       final response = await http.post(
         Uri.parse('$_baseUrl/api/auth/register'),
         headers: {'Content-Type': 'application/json'},
-        // Construimos el cuerpo JSON con TODOS los campos esperados por el backend
+        // Construimos el cuerpo JSON con TODOS los campos esperados por el backend (RegisterRequest)
         body: jsonEncode({
           'username': username,
           'email': email,
-          'password': password,
+          'password': password, // El backend se encarga de hashear esto
           'publicKey': publicKey,
           'kekSalt': kekSalt,
           'encryptedPrivateKey': encryptedPrivateKey,
@@ -51,24 +55,26 @@ class AuthApi {
         // Error en el registro (ej: usuario/email ya existe, validación fallida)
         String errorMessage = 'Error desconocido en el registro.';
         try {
-           // Intentar extraer el mensaje de error del backend (si lo envía en formato JSON)
+           // Intento extraer el mensaje de error del backend
            final errorBody = jsonDecode(response.body);
-           // Asumimos que el backend envía el error en un campo 'error' o 'message'
            errorMessage = errorBody['error'] ?? errorBody['message'] ?? response.body;
         } catch (_) {
-           errorMessage = response.body; // Si no es JSON, usar el cuerpo tal cual
+           errorMessage = response.body; // Si no es JSON, uso el cuerpo tal cual
         }
         print("AuthApi [Register] Error: $errorMessage");
         return {'success': false, 'message': errorMessage};
       }
     } catch (e) {
-      // Error de red u otro error inesperado
+      // Error de red u otro error inesperado (ej. servidor caído)
       print("AuthApi [Register] Excepción: $e");
       return {'success': false, 'message': 'No se pudo conectar al servidor: ${e.toString()}'};
     }
   }
 
-  /// **LOGIN ACTUALIZADO:** Llama al endpoint /api/auth/login del backend.
+  /// **LOGIN:** Llama al endpoint POST /api/auth/login del backend.
+  ///
+  /// Envía solo `username` y `password`.
+  ///
   /// Devuelve un mapa con `success: true` y **todos los datos** devueltos por el backend
   /// (token, kekSalt, encryptedPrivateKey, kekIv) si el login es exitoso.
   /// Devuelve un mapa con `success: false` y un `message` si falla.
@@ -86,17 +92,18 @@ class AuthApi {
       if (response.statusCode == 200) {
         // Login exitoso, el backend devuelve el objeto AuthResponse completo
         final Map<String, dynamic> responseBody = jsonDecode(response.body);
-        // Devolvemos todos los datos junto con la bandera de éxito
+        
+        // Devuelvo todos los datos junto con la bandera de éxito
+        // AuthService se encargará de procesar estos datos.
         return {'success': true, ...responseBody}; // Usamos spread operator (...)
       } else {
         // Error en el login (usuario no encontrado, contraseña incorrecta)
-        String errorMessage = 'Usuario o contraseña incorrectos.'; // Mensaje genérico por defecto
+        String errorMessage = 'Usuario o contraseña incorrectos.'; // Mensaje genérico
          try {
            final errorBody = jsonDecode(response.body);
            errorMessage = errorBody['error'] ?? errorBody['message'] ?? response.body;
         } catch (_) {
-           // Si el error no es JSON, mantenemos el mensaje genérico o usamos response.body
-           // errorMessage = response.body;
+           // Si el error no es JSON, mantengo el mensaje genérico
         }
         print("AuthApi [Login] Error: $errorMessage");
         return {'success': false, 'message': errorMessage};

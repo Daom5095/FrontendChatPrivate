@@ -3,8 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
-import 'register_screen.dart'; // Para navegar al registro
+import 'register_screen.dart'; 
 
+/// Mi pantalla de inicio de sesión.
+///
+/// Es `Stateful` porque necesita manejar el estado del formulario,
+/// los controladores de texto y el indicador de carga (`_isLoading`).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -14,38 +18,53 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   // --- Clave para el Form ---
-  final _formKey = GlobalKey<FormState>(); // Necesario para validar
+  /// La clave global para mi widget Form, la uso para
+  /// validar los campos (`_formKey.currentState!.validate()`).
+  final _formKey = GlobalKey<FormState>();
 
   // --- Controladores ---
+  /// Controlador para el campo de texto del nombre de usuario.
   final _usernameController = TextEditingController();
+  /// Controlador para el campo de texto de la contraseña.
   final _passwordController = TextEditingController();
 
   // --- Estados de UI ---
+  /// `true` cuando se está procesando el login (para mostrar el spinner).
   bool _isLoading = false;
-  bool _isPasswordVisible = false; // Estado para mostrar/ocultar contraseña
+  /// `true` si la contraseña debe ser visible (para el icono del ojo).
+  bool _isPasswordVisible = false;
 
   /// Intenta iniciar sesión llamando a AuthService.
+  /// Se activa al presionar el botón "INICIAR SESIÓN" o 'listo' en el teclado.
   Future<void> _submit() async {
-    // Validar el formulario antes de continuar
+    // 1. Validar el formulario usando la _formKey.
+    // Si `validate()` devuelve false (por algún validator), detengo la ejecución.
     if (!_formKey.currentState!.validate()) {
       return; // Si hay errores de validación, no hacer nada más
     }
 
-    // Mostrar indicador de carga
+    // 2. Mostrar indicador de carga y deshabilitar botones.
     setState(() { _isLoading = true; });
 
-    try { // Envolver la llamada en try-catch para errores inesperados
+    try { 
+      // 3. Llamar a mi AuthService para que haga la lógica de login.
+      // Uso `listen: false` porque estoy dentro de una función y no
+      // necesito que este widget se reconstruya si AuthService cambia.
       final authService = Provider.of<AuthService>(context, listen: false);
+      
       final success = await authService.login(
-        _usernameController.text.trim(), // Usar trim para quitar espacios
-        _passwordController.text, // La contraseña no necesita trim usualmente
+        _usernameController.text.trim(), // Uso trim() para quitar espacios
+        _passwordController.text, // La contraseña no necesita trim
       );
 
-      // Verificar si el widget sigue montado DESPUÉS del await
+      // 4. Verificar si el widget sigue "montado" (en pantalla) después
+      // de la llamada asíncrona. Si el usuario navegó hacia atrás
+      // mientras cargaba, no debo llamar a setState ni a ScaffoldMessenger.
       if (!mounted) return;
 
       if (!success) {
-        // Mostrar SnackBar si el login falla (ej. credenciales incorrectas)
+        // 5a. Si falla (AuthService devuelve false), muestro un error.
+        // AuthService ya manejó la limpieza del token si fue necesario.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Usuario o contraseña incorrectos.'),
@@ -53,12 +72,13 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
         );
       }
-      // Si el login es exitoso, AuthService notificará y main.dart
-      // se encargará de navegar a HomeScreen automáticamente.
-      // No necesitamos navegar desde aquí.
+      // 5b. Si `success` es true, no hago nada aquí.
+      // Mi `AuthService` (al ser un ChangeNotifier) notificará a sus listeners,
+      // y `main.dart` (que sí está escuchando) se encargará
+      // de navegar a `HomeScreen` automáticamente.
 
     } catch (e) {
-       // Capturar otros errores (red, etc.)
+       // 6. Capturar cualquier otro error inesperado (ej. red, servidor caído).
        print("LoginScreen Error en _submit: $e");
        if (mounted) {
          ScaffoldMessenger.of(context).showSnackBar(
@@ -69,16 +89,18 @@ class _LoginScreenState extends State<LoginScreen> {
          );
        }
     } finally {
-      // Ocultar indicador de carga, independientemente del resultado
+      // 7. Ocultar el indicador de carga, tanto si tuvo éxito como si falló.
+      // Solo lo hago si el widget sigue montado.
       if (mounted) {
         setState(() { _isLoading = false; });
       }
     }
   }
 
+  /// Limpio mis controladores cuando se destruye la pantalla.
+  /// Esto es importante para evitar fugas de memoria.
   @override
   void dispose() {
-    // Liberar controladores
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -87,26 +109,25 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Quitamos el AppBar para un look más limpio, opcional
-      // appBar: AppBar(title: const Text('Iniciar Sesión')),
+      // No uso AppBar aquí para un look más limpio, tipo app de login.
       body: Center( // Centrar todo el contenido verticalmente
-        child: SingleChildScrollView( // Permite scroll si el teclado cubre
-           padding: const EdgeInsets.all(24.0), // Más padding general
-          child: Form( // Envolver en un Form
-            key: _formKey, // Asociar la clave
+        child: SingleChildScrollView( // Permite hacer scroll si el teclado cubre los campos
+           padding: const EdgeInsets.all(24.0), // Padding general
+          child: Form( // Envuelvo mis campos en un Form
+            key: _formKey, // Asocio la clave para la validación
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center, // Centrar verticalmente
-              crossAxisAlignment: CrossAxisAlignment.stretch, // Estirar elementos horizontalmente
+              crossAxisAlignment: CrossAxisAlignment.stretch, // Estirar botones horizontalmente
               children: [
                 
-                // --- CAMBIO: Placeholder para Logo ---
-                // Reemplaza 'my_logo.png' por el nombre real de tu archivo de logo
+                // --- Logo de mi App ---
                 Image.asset(
-                  'assets/images/my_logo.png', // Asegúrate que esta ruta exista
-                  height: 80, // Ajusta el tamaño
-                  // Opcional: Manejar error si el logo no carga
+                  'assets/images/my_logo.png', // Ruta definida en pubspec.yaml
+                  height: 80, // Tamaño del logo
+                  // Defino un `errorBuilder` como fallback.
+                  // Si por alguna razón el logo no carga, muestro un icono
+                  // para que la UI no se rompa.
                   errorBuilder: (context, error, stackTrace) {
-                    // Si falla la carga del logo, muestra el icono original
                     return Icon(
                       Icons.lock_person_rounded, 
                       size: 80,
@@ -114,9 +135,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   },
                 ),
-                // --- FIN CAMBIO ---
+                // --- Fin Logo ---
 
                 const SizedBox(height: 24),
+                // Títulos (usando los estilos de mi Tema en main.dart)
                 Text(
                   'Bienvenido',
                   textAlign: TextAlign.center,
@@ -133,6 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 32),
+                
                 // --- Campo de Usuario ---
                 TextFormField(
                   controller: _usernameController,
@@ -141,15 +164,16 @@ class _LoginScreenState extends State<LoginScreen> {
                      prefixIcon: Icon(Icons.person_outline), // Icono
                     ),
                   keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.next, // Teclado: botón Siguiente
-                  validator: (value) { // Validación en línea
+                  textInputAction: TextInputAction.next, // Botón "Siguiente" en el teclado
+                  validator: (value) { // Validación del Form
                     if (value == null || value.trim().isEmpty) {
                       return 'Por favor, ingresa tu usuario';
                     }
-                    return null;
+                    return null; // Devuelve null si es válido
                   },
                 ),
                 const SizedBox(height: 16),
+                
                 // --- Campo de Contraseña ---
                 TextFormField(
                   controller: _passwordController,
@@ -159,50 +183,56 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Icono para mostrar/ocultar contraseña
                     suffixIcon: IconButton(
                        icon: Icon(
+                         // Cambio el icono basado en el estado `_isPasswordVisible`
                          _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
                        ),
                        onPressed: () {
+                         // Alterno el estado al presionar el icono
                          setState(() {
                            _isPasswordVisible = !_isPasswordVisible;
                          });
                        },
                     ),
                   ),
-                  obscureText: !_isPasswordVisible, // Ocultar si no es visible
-                  textInputAction: TextInputAction.done, // Teclado: botón Listo/Enviar
-                   onFieldSubmitted: (_) => _submit(), // Intentar login al presionar Enter/Listo
-                   validator: (value) { // Validación en línea
+                  obscureText: !_isPasswordVisible, // Ocultar texto si el estado es falso
+                  textInputAction: TextInputAction.done, // Botón "Listo" en el teclado
+                   onFieldSubmitted: (_) => _submit(), // Llama a _submit al presionar "Listo"
+                   validator: (value) { // Validación del Form
                     if (value == null || value.isEmpty) {
                       return 'Por favor, ingresa tu contraseña';
                     }
-                     if (value.length < 6) { // Ejemplo de validación de longitud mínima
+                     if (value.length < 6) { // Validación simple de longitud mínima
                        return 'La contraseña debe tener al menos 6 caracteres';
                      }
-                    return null;
+                    return null; // Válido
                   },
                 ),
                 const SizedBox(height: 24),
+                
                 // --- Botón de Login ---
+                // Muestro el spinner o el botón basado en el estado `_isLoading`
                 _isLoading
                     ? const Center(child: CircularProgressIndicator()) // Indicador centrado
                     : ElevatedButton(
-                        onPressed: _submit,
-                        style: ElevatedButton.styleFrom( // Estilo un poco más grande
+                        onPressed: _submit, // Llama a mi función de login
+                        style: ElevatedButton.styleFrom( // Estilo de mi Tema
                            padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         child: const Text('INICIAR SESIÓN', style: TextStyle(fontSize: 16)),
                       ),
                 const SizedBox(height: 16),
+                
                 // --- Botón para ir a Registro ---
                 TextButton(
-                  onPressed: _isLoading ? null : () { // Deshabilitar si está cargando
+                  onPressed: _isLoading ? null : () { // Deshabilitado si está cargando
+                    // Navego a la pantalla de registro
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (ctx) => const RegisterScreen()),
                     );
                   },
                   child: Text(
                      '¿No tienes cuenta? Regístrate aquí',
-                     style: TextStyle(color: Theme.of(context).primaryColor), // Usará Teal
+                     style: TextStyle(color: Theme.of(context).primaryColor),
                     ),
                 )
               ],
