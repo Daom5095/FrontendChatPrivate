@@ -1,7 +1,7 @@
 // lib/api/messaging_api.dart
 
-import 'dart.convert';
-import 'package.http/http.dart' as http;
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../config/app_constants.dart'; 
 
 /// Mi clase para interactuar con los endpoints /api/messaging del backend.

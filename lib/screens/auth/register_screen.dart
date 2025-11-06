@@ -1,6 +1,6 @@
 // lib/screens/auth/register_screen.dart
 
-import 'package/flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 // Quitamos import de HomeScreen, ya no navegamos directamente desde aquí

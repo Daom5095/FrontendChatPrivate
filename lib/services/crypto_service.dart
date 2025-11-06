@@ -1,5 +1,6 @@
 // lib/services/crypto_service.dart
 
+import 'package:encrypt/encrypt.dart' as encrypt;
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';

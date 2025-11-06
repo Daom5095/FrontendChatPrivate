@@ -1,6 +1,6 @@
 // lib/screens/users/user_list_screen.dart
 
-import 'dart.math'; // Para la lógica de colores aleatorios
+import 'dart:math'; // Para la lógica de colores aleatorios
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart'; // Para obtener el token
