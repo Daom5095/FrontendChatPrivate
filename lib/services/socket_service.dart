@@ -1,205 +1,204 @@
 // lib/services/socket_service.dart
 
+import 'dart:async'; // Importado para StreamController
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
 import 'dart:convert';
 import '../config/app_constants.dart';
-import 'crypto_service.dart'; 
-import '../api/messaging_api.dart'; 
+import 'crypto_service.dart';
+import '../api/messaging_api.dart';
 
 /// Mi servicio para manejar la conexión WebSocket (usando STOMP)
 /// y el envío/recepción de mensajes en tiempo real.
+///
+/// Convertido a un Singleton para mantener una única conexión
+/// persistente mientras la app esté logueada.
 class SocketService {
-  /// El cliente STOMP que maneja la conexión.
+  // --- Inicio: Lógica de Singleton ---
+  static final SocketService _instance = SocketService._internal();
+
+  /// Constructor privado interno
+  SocketService._internal();
+
+  /// El punto de acceso global a la única instancia de este servicio
+  static SocketService get instance => _instance;
+  // --- Fin: Lógica de Singleton ---
+
   late StompClient _stompClient;
-  /// Flag para saber si estamos conectados activamente.
   bool isConnected = false;
-  /// Flag para saber si `connect()` fue llamado y el cliente está inicializado.
   bool _isStompClientInitialized = false;
 
-  // --- Dependencias ---
-  /// Mi caja de herramientas criptográficas.
+  // --- Stream para transmitir mensajes entrantes ---
+  /// Un Stream "broadcast" permite que múltiples pantallas (HomeScreen, ChatScreen)
+  /// escuchen los mensajes entrantes a la vez.
+  final _messageStreamController = StreamController<StompFrame>.broadcast();
+
+  /// Las pantallas escucharán este Stream para recibir mensajes.
+  Stream<StompFrame> get messages => _messageStreamController.stream;
+  // --- Fin: Stream ---
+
   final CryptoService _cryptoService = CryptoService();
-  /// Mi cliente API para obtener claves públicas.
   final MessagingApi _messagingApi = MessagingApi();
-  /// El token JWT actual, necesario para `sendMessage` (para llamar a MessagingApi).
   String? _currentToken;
 
   /// Inicia la conexión con el servidor WebSocket.
   ///
-  /// 1. Configura el cliente STOMP (URL, headers de autenticación, callbacks).
-  /// 2. Se activa (`_stompClient.activate()`).
-  /// 3. En el callback `onConnect`, se suscribe a la cola personal
-  ///    del usuario (`/user/queue/messages`) para recibir mensajes.
-  void connect(String token, Function(StompFrame) onMessageReceived) {
+  /// Ya NO recibe un callback, en su lugar, alimentará el Stream `messages`.
+  void connect(String token) {
+    // Evitar reconexiones si ya está conectado o inicializado
+    if (_isStompClientInitialized && _stompClient.isActive) {
+      print("SocketService: Ya está conectado.");
+      return;
+    }
+
     print("SocketService: Intentando conectar al WebSocket...");
     _currentToken = token; // Guarda el token para usarlo al enviar mensajes
 
     _stompClient = StompClient(
       config: StompConfig(
-        // Construye la URL WebSocket (ws://) desde la baseUrl (http://)
-        url: '${AppConstants.baseUrl.replaceFirst('http', 'ws')}/ws', // Endpoint WebSocket de mi backend
-        
-        /// Callback cuando la conexión STOMP es exitosa.
+        url: '${AppConstants.baseUrl.replaceFirst('http', 'ws')}/ws',
         onConnect: (StompFrame frame) {
-          isConnected = true; // Marcar como conectado
+          isConnected = true;
           print("SocketService: Conectado exitosamente al WebSocket.");
-          
-          // Una vez conectados, nos suscribimos a nuestra cola personal.
-          // El backend (Spring) mapea '/user/queue/messages' a la
-          // cola específica de este usuario autenticado.
+
+          // Suscribirse a la cola personal.
+          // Cuando un mensaje llega, se añade al Stream.
           _stompClient.subscribe(
-            destination: '/user/queue/messages', // Destino estándar para mensajes privados
-            callback: onMessageReceived, // La función (en ChatScreen) que manejará los mensajes
+            destination: '/user/queue/messages',
+            callback: (StompFrame frame) {
+              // Añade el mensaje al stream para que los listeners (pantallas) reaccionen
+              _messageStreamController.add(frame);
+            },
           );
-           print("SocketService: Suscrito a /user/queue/messages.");
+          print("SocketService: Suscrito a /user/queue/messages.");
         },
-        
-        /// Callback para errores de WebSocket (ej. no se puede conectar).
         onWebSocketError: (dynamic error) {
           print("SocketService ERROR de WebSocket: ${error.toString()}");
-          isConnected = false; // Marcar como desconectado
+          isConnected = false;
+          _isStompClientInitialized = false; // Permitir reconexión
         },
-        
-        /// Callback para errores STOMP (ej. autenticación fallida).
         onStompError: (StompFrame frame) {
-           print("SocketService ERROR STOMP: ${frame.headers} - ${frame.body}");
-           isConnected = false;
+          print("SocketService ERROR STOMP: ${frame.headers} - ${frame.body}");
+          isConnected = false;
+          _isStompClientInitialized = false; // Permitir reconexión
         },
-        
-        // Pasamos el token JWT en las cabeceras para la autenticación
-        // tanto en la conexión WebSocket inicial como en el frame CONNECT de STOMP.
+        onDisconnect: (frame) {
+          print("SocketService: Desconectado.");
+          isConnected = false;
+          _isStompClientInitialized = false; // Permitir reconexión
+        },
         stompConnectHeaders: {'Authorization': 'Bearer $token'},
         webSocketConnectHeaders: {'Authorization': 'Bearer $token'},
-        
-        // Tiempos de espera y heartbeats (para mantener viva la conexión)
         connectionTimeout: const Duration(seconds: 15),
-        heartbeatOutgoing: const Duration(seconds: 20), // Enviar pings
-        heartbeatIncoming: const Duration(seconds: 20), // Esperar pongs
+        heartbeatOutgoing: const Duration(seconds: 20),
+        heartbeatIncoming: const Duration(seconds: 20),
       ),
     );
 
-    _isStompClientInitialized = true; // Marcar que el cliente existe
-    _stompClient.activate(); // Iniciar la conexión
+    _isStompClientInitialized = true;
+    _stompClient.activate();
   }
 
-  /// **Envía un mensaje cifrado End-to-End.**
+  /// Envía un mensaje cifrado End-to-End.
   ///
-  /// Este es el flujo E2EE para un mensaje nuevo:
-  ///
-  /// 1. **Generar Clave Simétrica:**
-  ///    - Crea una clave AES-CBC y un IV únicos para *este* mensaje (`_cryptoService.generateAESKeyAndIV_CBC`).
-  /// 2. **Cifrar Mensaje:**
-  ///    - Cifra el `plainTextMessage` usando esta clave AES (`_cryptoService.encryptAES_CBC`).
-  /// 3. **Combinar Clave/IV:**
-  ///    - Junta la clave AES (Base64) y el IV (Base64) en un solo string: "clave:iv" (`_cryptoService.combineKeyIV`).
-  /// 4. **Cifrado Asimétrico (para cada destinatario):**
-  ///    - Itera sobre la lista de `participantIds` (que debe incluirme a mí).
-  ///    - Para cada `userId`:
-  ///      a. Llama a `_messagingApi.getPublicKey` para obtener la clave pública RSA de ese usuario.
-  ///      b. Cifra el string "clave:iv" usando esa clave pública (`_cryptoService.encryptRSA`).
-  ///      c. Almacena el resultado en un mapa: `encryptedKeysMap[userId] = claveCifrada`.
-  /// 5. **Enviar Payload:**
-  ///    - Envía un mensaje STOMP a `/app/chat.send` (el controlador de mi backend)
-  ///      con un JSON (StompMessagePayload) que contiene:
-  ///      - `conversationId`
-  ///      - `ciphertext` (el mensaje cifrado con AES)
-  ///      - `encryptedKeys` (el mapa de claves AES cifradas con RSA)
-  Future<void> sendMessage(int conversationId, String plainTextMessage, List<int> participantIds) async {
-    // Validar estado antes de enviar
+  /// La lógica interna no cambia, pero ahora usa la instancia singleton.
+  Future<void> sendMessage(int conversationId, String plainTextMessage,
+      List<int> participantIds) async {
     if (!isConnected || !_isStompClientInitialized || _currentToken == null) {
-      print("SocketService [sendMessage] Error: No conectado, no inicializado o token nulo. No se puede enviar.");
+      print(
+          "SocketService [sendMessage] Error: No conectado, no inicializado o token nulo. No se puede enviar.");
       throw Exception("No conectado al servidor para enviar mensaje.");
     }
 
-    print("SocketService [sendMessage]: Iniciando proceso de envío E2EE para conv $conversationId...");
+    print(
+        "SocketService [sendMessage]: Iniciando proceso de envío E2EE para conv $conversationId...");
 
     try {
-      // 1. Generar nueva clave AES + IV para ESTE mensaje (usando CBC)
+      // 1. Generar nueva clave AES + IV
       final aesKeyMap = _cryptoService.generateAESKeyAndIV_CBC();
       final base64AesKey = aesKeyMap['key']!;
       final base64AesIV = aesKeyMap['iv']!;
       print("SocketService [sendMessage]: Clave/IV AES-CBC generados.");
 
       // 2. Cifrar el mensaje de texto plano con AES-CBC
-      final ciphertext = _cryptoService.encryptAES_CBC(plainTextMessage, base64AesKey, base64AesIV);
+      final ciphertext =
+          _cryptoService.encryptAES_CBC(plainTextMessage, base64AesKey, base64AesIV);
       print("SocketService [sendMessage]: Mensaje cifrado con AES-CBC.");
 
-      // 3. Combinar clave AES y IV en un solo string (para cifrar con RSA)
-      final combinedKeyIV = _cryptoService.combineKeyIV(base64AesKey, base64AesIV);
+      // 3. Combinar clave AES y IV
+      final combinedKeyIV =
+          _cryptoService.combineKeyIV(base64AesKey, base64AesIV);
       print("SocketService [sendMessage]: Clave/IV combinados.");
 
       // 4. Cifrar la clave AES+IV combinada para cada participante
-      final Map<String, String> encryptedKeysMap = {}; // Mapa { "userId": "claveAEScifradaConRSA" }
-      print("SocketService [sendMessage]: Obteniendo claves públicas y cifrando clave AES para ${participantIds.length} participantes...");
-      
+      final Map<String, String> encryptedKeysMap = {};
+      print(
+          "SocketService [sendMessage]: Obteniendo claves públicas y cifrando clave AES para ${participantIds.length} participantes...");
+
       for (var userId in participantIds) {
         try {
-          // 4a. Obtener clave pública RSA del destinatario desde la API
-          print("SocketService [sendMessage]: Obteniendo clave pública para usuario $userId...");
-          final publicKeyPem = await _messagingApi.getPublicKey(_currentToken!, userId);
-          
-          // 4b. Cifrar la clave AES+IV combinada usando esa clave pública
-          final encryptedCombinedKey = await _cryptoService.encryptRSA(combinedKeyIV, publicKeyPem);
-          
-          // 4c. Guardar en el mapa, usando el ID del usuario como clave (en formato String)
-          encryptedKeysMap[userId.toString()] = encryptedCombinedKey;
-           print("SocketService [sendMessage]: Clave AES cifrada para usuario $userId.");
-        } catch (e) {
-          // Si falla para un usuario, lo registro pero continúo con los demás
-          // (ej. si un usuario fue eliminado pero sigue en la lista de participantes).
-          print("SocketService [sendMessage] WARNING: Error al obtener/cifrar clave para usuario $userId: $e. Omitiendo destinatario.");
-        }
-      } // Fin del bucle for
+          // 4a. Obtener clave pública RSA del destinatario
+          print(
+              "SocketService [sendMessage]: Obteniendo clave pública para usuario $userId...");
+          final publicKeyPem =
+              await _messagingApi.getPublicKey(_currentToken!, userId);
 
-       // Validación crítica: ¿Pudimos cifrar para alguien?
-       if (encryptedKeysMap.isEmpty) {
-         print("SocketService [sendMessage] ERROR CRÍTICO: No se pudo cifrar la clave AES para NINGÚN destinatario. Abortando envío.");
-         throw Exception("No se pudo cifrar la clave para ningún destinatario.");
-       }
-       print("SocketService [sendMessage]: Clave AES cifrada para ${encryptedKeysMap.length} destinatarios.");
+          // 4b. Cifrar la clave AES+IV combinada
+          final encryptedCombinedKey =
+              await _cryptoService.encryptRSA(combinedKeyIV, publicKeyPem);
+
+          // 4c. Guardar en el mapa
+          encryptedKeysMap[userId.toString()] = encryptedCombinedKey;
+          print(
+              "SocketService [sendMessage]: Clave AES cifrada para usuario $userId.");
+        } catch (e) {
+          print(
+              "SocketService [sendMessage] WARNING: Error al obtener/cifrar clave para usuario $userId: $e. Omitiendo destinatario.");
+        }
+      }
+
+      if (encryptedKeysMap.isEmpty) {
+        print(
+            "SocketService [sendMessage] ERROR CRÍTICO: No se pudo cifrar la clave AES para NINGÚN destinatario. Abortando envío.");
+        throw Exception("No se pudo cifrar la clave para ningún destinatario.");
+      }
+      print(
+          "SocketService [sendMessage]: Clave AES cifrada para ${encryptedKeysMap.length} destinatarios.");
 
       // 5. Enviar el payload completo al backend vía STOMP
       print("SocketService [sendMessage]: Enviando payload STOMP a /app/chat.send...");
       _stompClient.send(
-        destination: '/app/chat.send', // Endpoint STOMP del backend (MessageController)
-        // El cuerpo es un JSON con los datos que espera StompMessagePayload en el backend
+        destination: '/app/chat.send',
         body: json.encode({
-          'conversationId': conversationId, // ID de la conversación
-          'ciphertext': ciphertext, // Mensaje cifrado con AES
-          'encryptedKeys': encryptedKeysMap, // Mapa de claves AES cifradas con RSA
+          'conversationId': conversationId,
+          'ciphertext': ciphertext,
+          'encryptedKeys': encryptedKeysMap,
         }),
       );
       print('SocketService [sendMessage]: Mensaje enviado (STOMP send llamado).');
-
     } catch (e) {
-      // Capturar cualquier error durante el proceso de cifrado o envío
       print("SocketService [sendMessage] ERROR general: $e");
-      // Re-lanzar la excepción para que la UI (ChatScreen) pueda reaccionar
       rethrow;
     }
   }
 
   /// Desconecta el cliente STOMP del servidor WebSocket.
-  ///
-  /// Se llama cuando el usuario cierra sesión o al cerrar la pantalla de chat.
   void disconnect() {
     print("SocketService: Solicitando desconexión...");
-    // Verificar si el cliente fue inicializado y está activo antes de desactivar
     if (_isStompClientInitialized && _stompClient.isActive) {
-      _stompClient.deactivate(); // Envía el comando DISCONNECT y cierra la conexión
+      _stompClient.deactivate();
       print("SocketService: Cliente STOMP desactivado.");
     } else if (!_isStompClientInitialized) {
-       print("SocketService: Intento de desconectar pero el cliente no fue inicializado.");
+      print(
+          "SocketService: Intento de desconectar pero el cliente no fue inicializado.");
     } else {
-       print("SocketService: Cliente STOMP ya estaba inactivo.");
+      print("SocketService: Cliente STOMP ya estaba inactivo.");
     }
     
-    // Actualizar estado local independientemente
     isConnected = false;
-    _currentToken = null; // Limpiar token
-    _isStompClientInitialized = false; // Marcar como no inicializado
+    _currentToken = null;
+    _isStompClientInitialized = false;
     print("SocketService: Desconectado lógicamente.");
   }
-} 
+}
