@@ -62,8 +62,7 @@ class SocketService {
           isConnected = true;
           print("SocketService: Conectado exitosamente al WebSocket.");
 
-          // Suscribirse a la cola personal.
-          // Cuando un mensaje llega, se añade al Stream.
+          // 1. Suscribirse a la cola personal de MENSAJES.
           _stompClient.subscribe(
             destination: '/user/queue/messages',
             callback: (StompFrame frame) {
@@ -72,6 +71,32 @@ class SocketService {
             },
           );
           print("SocketService: Suscrito a /user/queue/messages.");
+
+          // --- ¡NUEVO! ---
+          // 2. Suscribirse a la cola personal de ERRORES.
+          _stompClient.subscribe(
+            destination: '/user/queue/errors',
+            callback: (StompFrame frame) {
+              print("SocketService [ERROR STOMP]: Error de WebSocket recibido:");
+              if (frame.body != null) {
+                try {
+                  final errorBody = json.decode(frame.body!);
+                  print(
+                      "SocketService [ERROR STOMP]: Tipo: ${errorBody['type']}, Mensaje: ${errorBody['message']}");
+                  // Aquí podrías mostrar un Toast/Snackbar global al usuario
+                  // ej: ToastService.showError("Error: ${errorBody['message']}");
+                } catch (e) {
+                  print(
+                      "SocketService [ERROR STOMP]: Cuerpo no JSON: ${frame.body}");
+                }
+              } else {
+                print(
+                    "SocketService [ERROR STOMP]: Error recibido sin cuerpo.");
+              }
+            },
+          );
+          print("SocketService: Suscrito a /user/queue/errors.");
+          // --- FIN DEL CAMBIO ---
         },
         onWebSocketError: (dynamic error) {
           print("SocketService ERROR de WebSocket: ${error.toString()}");
@@ -195,7 +220,7 @@ class SocketService {
     } else {
       print("SocketService: Cliente STOMP ya estaba inactivo.");
     }
-    
+
     isConnected = false;
     _currentToken = null;
     _isStompClientInitialized = false;

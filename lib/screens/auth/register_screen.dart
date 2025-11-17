@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
-// Quitamos import de HomeScreen, ya no navegamos directamente desde aquí
+// ¡Añadimos el import de HomeScreen para poder navegar a ella!
+import '../home/home_screen.dart'; 
 
 /// Mi pantalla de registro de nuevos usuarios.
 ///
@@ -54,33 +55,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
     // 3. Mostrar indicador de carga.
     setState(() { _isLoading = true; });
 
+    // --- ¡CORRECCIÓN! ---
+    // Declarar 'success' aquí, fuera del try, para que sea visible en 'finally'.
+    bool success = false;
+    // --- FIN CORRECCIÓN ---
+
     try {
       // 4. Llamar a mi AuthService (con listen: false)
       final authService = Provider.of<AuthService>(context, listen: false);
       
-      // Llamo a `authService.register`. Este método ahora
-      // se encarga de *toda* la lógica de criptografía (generar claves,
-      // derivar KEK, cifrar) Y de llamar a la API.
-      final success = await authService.register(
+      // 5. Asignar el valor a la variable 'success' ya declarada
+      success = await authService.register( // <-- Quitar 'final'
         _usernameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text, // La contraseña
       );
 
-      // 5. Verificar si el widget sigue montado después del `await`.
+      // 6. Verificar si el widget sigue montado después del `await`.
       if (!mounted) return;
 
       if (success) {
-        // 6a. Si el registro es exitoso (`true`):
-        print("RegisterScreen: Registro exitoso. AuthService navegará.");
-        // No necesito navegar. `AuthService` notificó a `main.dart`,
-        // que automáticamente nos llevará a `HomeScreen`.
-        // Si el usuario está en esta pantalla (RegisterScreen), esta
-        // pantalla simplemente desaparecerá de la pila de navegación.
+        // 7a. Si el registro es exitoso (`true`):
+        print("RegisterScreen: Registro exitoso. Navegando a HomeScreen...");
+        
+        // ¡Navegación explícita!
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (ctx) => const HomeScreen()),
+          (route) => false, // Esta condición borra todas las rutas anteriores
+        );
+      
       } else {
-        // 6b. Si falla (`false`):
-        // Muestro un error genérico. AuthService ya imprimió el error
-        // detallado (ej. "usuario ya existe") en la consola.
+        // 7b. Si falla (`false`):
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Error en el registro. Verifica los datos o el usuario/email podría ya existir.'),
@@ -88,8 +93,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
         );
       }
+
     } catch (e) {
-       // 7. Capturar cualquier otro error inesperado (ej. red).
+       // 8. Capturar cualquier otro error inesperado (ej. red).
        print("RegisterScreen Error en _submit: $e");
        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -100,9 +106,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
           );
        }
     } finally {
-      // 8. Ocultar el indicador de carga, pase lo que pase.
+      // 9. Ocultar el indicador de carga, pase lo que pase.
       if (mounted) {
-        setState(() { _isLoading = false; });
+        // ¡Ahora 'success' SÍ es visible!
+        // Solo ocultamos el spinner si el registro falló.
+        // Si tuvo éxito, la pantalla se destruye y no es necesario.
+        if (!success) {
+           setState(() { _isLoading = false; });
+        }
       }
     }
   }
@@ -119,10 +130,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
 
   @override
-  Widget build(BuildContextBContext) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      // Muestro un AppBar aquí para que el usuario pueda volver fácilmente
-      // a la pantalla de Login si entró por error.
       appBar: AppBar(title: const Text('Crear Nueva Cuenta')),
       body: Center(
         child: SingleChildScrollView(
@@ -134,12 +143,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                  
-                // --- Logo/Icono ---
                 Image.asset(
                   'assets/images/my_logo.png', // Misma ruta del logo
-                  height: 60, // Un poco más pequeño que en el login
+                  height: 60, 
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback a un icono relevante si el logo falla
                     return Icon(
                       Icons.person_add_alt_1_rounded, 
                       size: 60,
@@ -147,10 +154,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     );
                   },
                 ),
-                // --- Fin Logo/Icono ---
 
                 const SizedBox(height: 16),
-                // Título
                  Text(
                   'Únete a la conversación segura',
                   textAlign: TextAlign.center,
@@ -161,7 +166,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 24),
                 
-                // --- Campo de Usuario ---
                 TextFormField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
@@ -169,7 +173,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                      prefixIcon: Icon(Icons.person_outline),
                     ),
                   keyboardType: TextInputType.text,
-                  textInputAction: TextInputAction.next, // Teclado: Siguiente
+                  textInputAction: TextInputAction.next,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Ingresa un nombre de usuario';
@@ -177,12 +181,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value.trim().length < 3) {
                       return 'Debe tener al menos 3 caracteres';
                     }
-                    return null; // Válido
+                    return null;
                   },
                 ),
                 const SizedBox(height: 16),
                 
-                // --- Campo de Email ---
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
@@ -190,21 +193,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                   keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next, // Teclado: Siguiente
+                  textInputAction: TextInputAction.next,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Ingresa tu email';
                     }
-                    // Expresión regular simple para validar email
                     if (!RegExp(r'\S+@\S+\.\S+').hasMatch(value)) {
                        return 'Ingresa un email válido';
                     }
-                    return null; // Válido
+                    return null;
                   },
                 ),
                 const SizedBox(height: 16),
                 
-                // --- Campo de Contraseña ---
                 TextFormField(
                   controller: _passwordController,
                   decoration: InputDecoration(
@@ -218,21 +219,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   obscureText: !_isPasswordVisible,
-                  textInputAction: TextInputAction.next, // Teclado: Siguiente
+                  textInputAction: TextInputAction.next,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Ingresa una contraseña';
                     }
-                    // Aumento la seguridad pidiendo 8 caracteres para el registro
                     if (value.length < 8) {
                       return 'Debe tener al menos 8 caracteres';
                     }
-                    return null; // Válido
+                    return null;
                   },
                 ),
                 const SizedBox(height: 16),
                 
-                // --- Campo de Confirmar Contraseña ---
                  TextFormField(
                   controller: _confirmPasswordController,
                   decoration: InputDecoration(
@@ -246,26 +245,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ),
                   obscureText: !_isConfirmPasswordVisible,
-                  textInputAction: TextInputAction.done, // Teclado: Listo
-                   onFieldSubmitted: (_) => _submit(), // Intentar registro al presionar "Listo"
+                  textInputAction: TextInputAction.done,
+                   onFieldSubmitted: (_) => _submit(),
                    validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Confirma tu contraseña';
                     }
-                    // Compruebo si coincide con el campo anterior
                     if (value != _passwordController.text) { 
                       return 'Las contraseñas no coinciden';
                     }
-                    return null; // Válido
+                    return null;
                   },
                 ),
-                const SizedBox(height: 32), // Más espacio antes del botón
+                const SizedBox(height: 32),
                 
-                // --- Botón de Registro ---
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
-                        onPressed: _submit, // Llama a mi función de registro
+                        onPressed: _submit,
                          style: ElevatedButton.styleFrom(
                            padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
@@ -273,13 +270,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                 const SizedBox(height: 8),
                 
-                // --- Botón para volver a Login ---
                 TextButton(
-                  // Deshabilitado si está cargando
-                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(), // Simplemente vuelve atrás
+                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(), 
                   child: Text(
                      '¿Ya tienes cuenta? Inicia sesión',
-                      style: TextStyle(color: Theme.of(context).hintColor), // Color de acento
+                      style: TextStyle(color: Theme.of(context).hintColor),
                     ),
                 ),
               ],
