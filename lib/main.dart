@@ -135,7 +135,6 @@ class _MyAppState extends State<MyApp> {
                visualDensity: VisualDensity.adaptivePlatformDensity, 
             ),
 
-            // ... (la lógica de FutureBuilder en 'home' no cambia) ...
             home: FutureBuilder(
               future: _initAuthFuture,
               builder: (context, snapshot) {

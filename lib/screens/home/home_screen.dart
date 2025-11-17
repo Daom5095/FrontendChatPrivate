@@ -16,7 +16,7 @@ import '../../services/crypto_service.dart';
 import '../../services/socket_service.dart';
 import '../../services/chat_state_service.dart';
 
-// ... (El resto de la clase HomeScreen no cambia) ...
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
