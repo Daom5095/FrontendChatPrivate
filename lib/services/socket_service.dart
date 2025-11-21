@@ -95,7 +95,6 @@ class SocketService {
             },
           );
           print("SocketService: Suscrito a /user/queue/errors.");
-        }
         },
         onWebSocketError: (dynamic error) {
           print("SocketService ERROR de WebSocket: ${error.toString()}");

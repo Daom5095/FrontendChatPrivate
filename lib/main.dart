@@ -63,8 +63,6 @@ class _MyAppState extends State<MyApp> {
           return MaterialApp(
             title: 'Chat Privado Seguro',
             debugShowCheckedModeBanner: false,
-
-            }
             theme: ThemeData(
               primarySwatch: Colors.blue,
               primaryColor: primaryBlue,
