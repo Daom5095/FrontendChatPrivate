@@ -347,8 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- Widget Interno _ConversationTile ---
-// (Sin cambios)
+
 
 class _ConversationTile extends StatefulWidget {
   final Map<String, dynamic> conversation;

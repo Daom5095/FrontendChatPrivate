@@ -1,8 +1,8 @@
 // lib/api/auth_api.dart
 
 import 'dart:convert';
-import 'package:http/http.dart' as http; // Para realizar las peticiones HTTP
-import '../config/app_constants.dart'; // Para obtener la baseUrl
+import 'package:http/http.dart' as http; 
+import '../config/app_constants.dart'; 
 
 /// Mi clase dedicada a realizar las llamadas HTTP a los endpoints de autenticación del backend.
 class AuthApi {

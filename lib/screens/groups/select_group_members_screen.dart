@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../api/user_api.dart';
-import 'create_group_screen.dart'; // La siguiente pantalla
+import 'create_group_screen.dart'; 
 
 /// Pantalla para seleccionar miembros para un nuevo grupo.
 class SelectGroupMembersScreen extends StatefulWidget {
@@ -72,7 +72,7 @@ class _SelectGroupMembersScreenState extends State<SelectGroupMembersScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Crear Nuevo Grupo'),
-        // --- ¡CORRECCIÓN! Usamos 'bottom' en lugar de 'subheader' ---
+        
         backgroundColor: Theme.of(context).primaryColor, 
         foregroundColor: Colors.white, 
         bottom: PreferredSize(
@@ -85,7 +85,7 @@ class _SelectGroupMembersScreenState extends State<SelectGroupMembersScreen> {
             ),
           ),
         ),
-        // --- FIN CORRECCIÓN ---
+        
       ),
       body: FutureBuilder<List<dynamic>>(
         future: _usersFuture,

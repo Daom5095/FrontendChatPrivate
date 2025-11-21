@@ -7,8 +7,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
-import 'services/chat_state_service.dart'; // <-- IMPORTAR EL NUEVO SERVICIO
-
+import 'services/chat_state_service.dart'; 
 void main() {
   runApp(const MyApp());
 }
@@ -22,7 +21,6 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final AuthService _authService = AuthService();
-  // --- AÑADIR EL NUEVO SERVICIO ---
   final ChatStateService _chatStateService = ChatStateService();
   late final Future<void> _initAuthFuture;
 
@@ -34,7 +32,6 @@ class _MyAppState extends State<MyApp> {
     print("MyApp [initState]: Llamada a AuthService.init() realizada.");
   }
 
-  // --- AÑADIR DISPOSE ---
   @override
   void dispose() {
     _authService.dispose();
@@ -45,13 +42,13 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     
-    // ... (toda la paleta de colores no cambia) ...
+    
     const Color primaryBlue = Color(0xFF23518C);
     const Color accentPeriwinkle = Color(0xFF899DD9);
     const Color textAlmostBlack = Color(0xFF0D1826);
     const Color textMutedBlueGrey = Color(0xFF8F9FBF);
 
-    // --- MODIFICACIÓN: USAR MULTIPROVIDER ---
+    
     // En lugar de un solo ChangeNotifierProvider, usamos MultiProvider
     // para proveer tanto AuthService como ChatStateService.
     return MultiProvider(
@@ -59,7 +56,7 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider.value(value: _authService),
         ChangeNotifierProvider.value(value: _chatStateService),
       ],
-      // --- FIN MODIFICACIÓN ---
+    
 
       child: Consumer<AuthService>(
         builder: (ctx, auth, _) {
@@ -67,7 +64,7 @@ class _MyAppState extends State<MyApp> {
             title: 'Chat Privado Seguro',
             debugShowCheckedModeBanner: false,
 
-            // ... (todo el ThemeData no cambia) ...
+            }
             theme: ThemeData(
               primarySwatch: Colors.blue,
               primaryColor: primaryBlue,

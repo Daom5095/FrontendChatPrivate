@@ -14,7 +14,6 @@ import '../../services/chat_state_service.dart';
 import 'dart:convert';
 import 'chat_details_screen.dart';
 
-// --- Widget ChatBubble (Sin cambios) ---
 class ChatBubble extends StatelessWidget {
   final String text;
   final bool isMe;
@@ -108,7 +107,7 @@ class ChatBubble extends StatelessWidget {
   }
 }
 
-// --- Widget BubbleClipper (Sin cambios) ---
+
 class BubbleClipper extends CustomClipper<Path> {
   final bool isMe;
   final double nipHeight = 10.0;
@@ -163,7 +162,7 @@ class BubbleClipper extends CustomClipper<Path> {
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
 
-// --- Modelo ChatMessage (Sin cambios) ---
+
 class ChatMessage {
   final String text;
   final int senderId;
@@ -758,14 +757,14 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
               child: TextField(
                   controller: _messageController,
-                  // --- ¡AQUÍ ESTÁ EL CAMBIO! ---
+              
                   textInputAction: TextInputAction.send,
                   onSubmitted: (value) {
                     if (_messageController.text.trim().isNotEmpty) {
                       _sendMessage();
                     }
                   },
-                  // --- FIN DEL CAMBIO ---
+                  
                   decoration: InputDecoration(
                       hintText: 'Escribe tu mensaje seguro...',
                       hintStyle:

@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart'; 
 import '../../api/user_api.dart'; 
 import '../../api/conversation_api.dart'; 
-import '../chat/chat_screen.dart';   // <-- ¡CORRECCIÓN! Import faltante
+import '../chat/chat_screen.dart';  
 
 /// Pantalla que muestra una lista de usuarios registrados (excluyendo al actual)
 /// y permite iniciar una nueva conversación 1 a 1 con uno de ellos.
@@ -82,7 +82,7 @@ class _UserListScreenState extends State<UserListScreen> {
 
       if (!mounted) return;
 
-      // ¡Este es el método que daba error!
+      
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (ctx) => ChatScreen(conversationData: newConversationData),

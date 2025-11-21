@@ -1,27 +1,25 @@
 // lib/services/auth_service.dart
 
-import 'dart:convert'; // Para base64Encode/Decode
-import 'dart:typed_data'; // Para Uint8List
+import 'dart:convert'; 
+import 'dart:typed_data'; 
 import 'package:flutter/material.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'secure_storage.dart';
 import 'crypto_service.dart';
 import '../api/user_api.dart';
 import '../api/auth_api.dart';
-import 'socket_service.dart'; // <-- IMPORTAR SOCKET SERVICE
+import 'socket_service.dart'; 
 
 /// Mi servicio central para manejar todo lo relacionado con la autenticación.
 ///
-/// ... (el resto de la clase no cambia) ...
-///
 class AuthService with ChangeNotifier {
-  // --- Mis Ayudantes ---
+ 
   final AuthApi _authApi = AuthApi();
   final SecureStorageService _storageService = SecureStorageService();
   final CryptoService _cryptoService = CryptoService();
   final UserApi _userApi = UserApi();
 
-  // ... (el resto de los estados y getters no cambian) ...
+  
   String? _token;
   int? _userId;
   String? _username;
@@ -230,10 +228,10 @@ class AuthService with ChangeNotifier {
   Future<void> logout() async {
     print("AuthService: Cerrando sesión...");
     
-    // --- MODIFICACIÓN ---
+ 
     // Desconecta el WebSocket antes de limpiar la sesión.
     SocketService.instance.disconnect();
-    // --- FIN MODIFICACIÓN ---
+   
 
     await _clearLocalSession(clearPrivateKey: true); // Asegura borrar todo
     notifyListeners(); // Notifica a la UI para redirigir a LoginScreen

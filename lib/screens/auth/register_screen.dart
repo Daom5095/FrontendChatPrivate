@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
-// ¡Añadimos el import de HomeScreen para poder navegar a ella!
 import '../home/home_screen.dart'; 
 
 /// Mi pantalla de registro de nuevos usuarios.

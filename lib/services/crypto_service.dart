@@ -5,8 +5,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:fast_rsa/fast_rsa.dart';
-import 'package:pointycastle/export.dart' as pointy; // Para PBKDF2
-
+import 'package:pointycastle/export.dart' as pointy; 
 /// Mi servicio de utilidades criptográficas.
 ///
 /// Esta clase es mi "caja de herramientas" para toda la criptografía.

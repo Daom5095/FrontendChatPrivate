@@ -123,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // --- Logo de mi App ---
                 Image.asset(
                   'assets/images/my_logo.png', // Ruta definida en pubspec.yaml
-                  height: 80, // Tamaño del logo
+                  height: 80, 
                   // Defino un `errorBuilder` como fallback.
                   // Si por alguna razón el logo no carga, muestro un icono
                   // para que la UI no se rompa.
@@ -135,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   },
                 ),
-                // --- Fin Logo ---
+              
 
                 const SizedBox(height: 24),
                 // Títulos (usando los estilos de mi Tema en main.dart)

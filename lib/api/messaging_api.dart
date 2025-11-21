@@ -54,13 +54,5 @@ class MessagingApi {
     }
   }
 
-  /*
-  // --- Método Potencial Futuro ---
-  /// Podría usar esto si permitiera a los usuarios rotar sus claves.
-  Future<bool> uploadPublicKey(String token, String publicKeyPem) async {
-    // ... (lógica para POST /api/messaging/public-key) ...
-    return true;
-  }
-  */
 
 } 

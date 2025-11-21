@@ -1,6 +1,6 @@
 // lib/services/socket_service.dart
 
-import 'dart:async'; // Importado para StreamController
+import 'dart:async'; 
 import 'package:stomp_dart_client/stomp.dart';
 import 'package:stomp_dart_client/stomp_config.dart';
 import 'package:stomp_dart_client/stomp_frame.dart';
@@ -15,7 +15,7 @@ import '../api/messaging_api.dart';
 /// Convertido a un Singleton para mantener una única conexión
 /// persistente mientras la app esté logueada.
 class SocketService {
-  // --- Inicio: Lógica de Singleton ---
+ 
   static final SocketService _instance = SocketService._internal();
 
   /// Constructor privado interno
@@ -23,8 +23,7 @@ class SocketService {
 
   /// El punto de acceso global a la única instancia de este servicio
   static SocketService get instance => _instance;
-  // --- Fin: Lógica de Singleton ---
-
+  
   late StompClient _stompClient;
   bool isConnected = false;
   bool _isStompClientInitialized = false;
@@ -72,7 +71,7 @@ class SocketService {
           );
           print("SocketService: Suscrito a /user/queue/messages.");
 
-          // --- ¡NUEVO! ---
+    
           // 2. Suscribirse a la cola personal de ERRORES.
           _stompClient.subscribe(
             destination: '/user/queue/errors',
@@ -96,7 +95,7 @@ class SocketService {
             },
           );
           print("SocketService: Suscrito a /user/queue/errors.");
-          // --- FIN DEL CAMBIO ---
+        }
         },
         onWebSocketError: (dynamic error) {
           print("SocketService ERROR de WebSocket: ${error.toString()}");

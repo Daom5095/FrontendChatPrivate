@@ -7,9 +7,8 @@ import '../config/app_constants.dart';
 class ConversationApi {
   final String _baseUrl = AppConstants.baseUrl;
 
-  // (getConversations no cambia)
   Future<List<dynamic>> getConversations(String token) async {
-    // ... (código existente sin cambios)
+
     print(
         "ConversationApi [getConversations]: Solicitando lista de conversaciones...");
     try {
@@ -44,10 +43,9 @@ class ConversationApi {
     }
   }
 
-  // (createConversation no cambia)
+
   Future<Map<String, dynamic>> createConversation(
       String token, int userId) async {
-    // ... (código existente sin cambios)
     print(
         "ConversationApi [createConversation]: Creando conversación 1-a-1 con usuario ID $userId...");
     try {
@@ -87,10 +85,9 @@ class ConversationApi {
     }
   }
 
-  // (createGroupConversation no cambia)
   Future<Map<String, dynamic>> createGroupConversation(
       String token, String title, List<int> participantIds) async {
-    // ... (código existente sin cambios)
+
     print(
         "ConversationApi [createGroupConversation]: Creando grupo '$title' con ${participantIds.length} miembros...");
     try {
@@ -133,10 +130,10 @@ class ConversationApi {
     }
   }
 
-  // (getMessagesPaged no cambia)
+
   Future<Map<String, dynamic>> getMessagesPaged(
       String token, int conversationId, int page, int size) async {
-    // ... (código existente sin cambios)
+   
     print(
         "ConversationApi [getMessagesPaged]: Solicitando página $page (tamaño $size) para conv $conversationId...");
     try {
@@ -172,7 +169,6 @@ class ConversationApi {
     }
   }
 
-  // --- ¡NUEVOS MÉTODOS PARA GESTIÓN DE GRUPOS! ---
 
   /// Obtiene la lista actualizada de participantes de un chat.
   /// Llama a GET /api/conversations/{id}/participants

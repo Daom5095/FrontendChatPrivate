@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/conversation_api.dart';
 import '../../services/auth_service.dart';
-import '../groups/add_participant_screen.dart'; // La pantalla que acabamos de crear
+import '../groups/add_participant_screen.dart'; 
 
 class ChatDetailsScreen extends StatefulWidget {
   // Recibimos los datos iniciales de la pantalla de chat
@@ -208,7 +208,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                 ),
               if (_isOwner) const Divider(),
               
-              // --- Título de la lista ---
+             
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Text(

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/conversation_api.dart';
 import '../../services/auth_service.dart';
-import '../chat/chat_screen.dart'; // <-- ¡CORRECCIÓN! Import faltante
+import '../chat/chat_screen.dart';
 import '../home/home_screen.dart'; 
 
 /// Pantalla final para poner nombre al grupo y crearlo.
